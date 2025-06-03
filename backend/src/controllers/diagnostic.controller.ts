@@ -42,16 +42,16 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
       }
 
       try {
-        console.log(`[diagnostic.controller timeout Task ${taskId}]: setTimeout triggered. Current task status: ${task.status}`);
+        console.log(`[diagnostic.controller timeout Task ${taskId}]: ENTERING TRY block for AI processing. Current task status: ${task.status}`);
         task.status = DiagnosticTaskStatus.PROCESSING;
         tasksDB.set(taskId, task); // Update status to PROCESSING
         console.log(`[diagnostic.controller timeout Task ${taskId}]: Status updated to PROCESSING.`);
         
-        console.log(`[diagnostic.controller timeout Task ${taskId}]: Calling processWithAI...`);
+        console.log(`[diagnostic.controller timeout Task ${taskId}]: PREPARING to call processWithAI. SystemInfo keys: ${task.systemInfo ? Object.keys(task.systemInfo) : 'N/A'}, Problem: ${task.problemDescription ? `'${task.problemDescription.substring(0,50)}...'` : 'N/A'}`);
         const aiReport = await processWithAI(task.systemInfo || {} as SystemInfo, task.problemDescription);
-        console.log(`[diagnostic.controller timeout Task ${taskId}]: processWithAI completed. Report snippet:`, JSON.stringify(aiReport).substring(0,100) + '...');
+        console.log(`[diagnostic.controller timeout Task ${taskId}]: RETURNED from processWithAI. Report snippet:`, JSON.stringify(aiReport).substring(0,100) + '...');
 
-        const currentTaskState = tasksDB.get(taskId); // Re-fetch to be safe, though likely same object
+        const currentTaskState = tasksDB.get(taskId); // Re-fetch to be safe
         if (!currentTaskState) {
             console.error(`[diagnostic.controller timeout Task ${taskId}]: Task disappeared from tasksDB after AI processing.`);
             return;
@@ -64,7 +64,10 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
         console.log(`[diagnostic.controller timeout Task ${taskId}]: Status updated to COMPLETED. Report stored.`);
 
       } catch (aiError) {
-        console.error(`[diagnostic.controller timeout Task ${taskId}]: Error during AI processing or status update:`, aiError);
+        console.error(`[diagnostic.controller timeout Task ${taskId}]: CAUGHT ERROR during AI processing or status update. Type: ${typeof aiError}`, aiError);
+        if (aiError instanceof Error) {
+            console.error(`[diagnostic.controller timeout Task ${taskId}]: Error Name: ${aiError.name}, Message: ${aiError.message}, Stack: ${aiError.stack}`);
+        }
         const taskToFail = tasksDB.get(taskId);
         if (taskToFail) {
           taskToFail.status = DiagnosticTaskStatus.FAILED;
@@ -75,10 +78,10 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
           tasksDB.set(taskId, taskToFail); // Update status to FAILED
           console.log(`[diagnostic.controller timeout Task ${taskId}]: Status updated to FAILED due to error.`);
         } else {
-          console.error(`[diagnostic.controller timeout Task ${taskId}]: Task not found in tasksDB when trying to mark as FAILED.`);
+          console.error(`[diagnostic.controller timeout Task ${taskId}]: Task not found in tasksDB when trying to mark as FAILED after an error.`);
         }
       }
-    }, 5000); // 5-second delay before starting AI processing
+    }, 5000); // 5-second delay
 
     res.status(202).json({ 
       message: 'Données de diagnostic reçues, traitement en cours.',
@@ -89,6 +92,9 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
 
   } catch (error) {
     console.error('[diagnostic.controller submit] Outer error during submission:', error);
+    if (error instanceof Error) {
+        console.error(`[diagnostic.controller submit] Outer error details: Name: ${error.name}, Message: ${error.message}, Stack: ${error.stack}`);
+    }
     res.status(500).json({ message: 'Erreur interne du serveur lors de la soumission des données.' });
     console.log('============================================================');
   }
@@ -130,7 +136,7 @@ export const getDiagnosticReport = async (req: Request, res: Response): Promise<
         completedAt: task.completedAt?.toISOString(),
         problemDescription: task.problemDescription,
         errorDetails: `Le traitement du diagnostic a échoué. ${task.error ? `Détails: ${task.error}` : 'Aucun détail supplémentaire.'}`,
-        diagnosticReport: task.report, // This would contain the { error: ..., details: ... } object
+        diagnosticReport: task.report,
       });
       return;
     }
@@ -146,7 +152,6 @@ export const getDiagnosticReport = async (req: Request, res: Response): Promise<
         diagnosticReport: task.report,
       });
     } else {
-      // This case should ideally not be hit if logic is correct (e.g. COMPLETED but no report)
       console.warn(`[diagnostic.controller getReport Task ${taskId}]: Task status is ${task.status} but state is unexpected (e.g. COMPLETED without report). Responding 404.`);
       res.status(404).json({ 
         message: `Rapport pour la tâche ${taskId} est dans un état inattendu ou incomplet (statut: ${task.status}).`,
@@ -159,6 +164,9 @@ export const getDiagnosticReport = async (req: Request, res: Response): Promise<
   } catch (error) {
     const taskId = req.params.taskId || 'unknown';
     console.error(`[diagnostic.controller getReport Task ${taskId}]: Outer error during report retrieval:`, error);
+     if (error instanceof Error) {
+        console.error(`[diagnostic.controller getReport Task ${taskId}] Outer error details: Name: ${error.name}, Message: ${error.message}, Stack: ${error.stack}`);
+    }
     res.status(500).json({ message: 'Erreur interne du serveur lors de la récupération du rapport.' });
   }
 };

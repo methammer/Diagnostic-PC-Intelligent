@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios'; // Import axios to check for AxiosError
+import axios from 'axios';
 import DiagnosticForm from './components/DiagnosticForm';
 import ReportDisplay from './components/ReportDisplay';
 import { submitDiagnostic, getDiagnosticReport, DiagnosticReport, SubmitDiagnosticPayload } from './services/apiClient';
-import { DiagnosticTaskStatus } from '../../backend/src/models/diagnosticTask.model';
+import { DiagnosticTaskStatus } from '../../backend/src/models/diagnosticTask.model'; // Ajustez si le chemin partagé est différent
 
 const App: React.FC = () => {
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -12,19 +12,30 @@ const App: React.FC = () => {
   const [isLoadingReport, setIsLoadingReport] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFormSubmit = async (problemDescription: string) => {
-    console.log("[App.tsx handleFormSubmit] Submitting diagnostic with description:", problemDescription);
+  const handleFormSubmit = async (problemDescription: string, systemInfoJSON: string) => {
     setIsLoadingForm(true);
     setError(null);
     setReportData(null);
     setTaskId(null);
 
+    let systemInfo: any = {}; // Default to empty object
+    if (systemInfoJSON.trim()) {
+      try {
+        systemInfo = JSON.parse(systemInfoJSON);
+      } catch (parseError) {
+        console.error("[App.tsx handleFormSubmit] Erreur de parsing du JSON systemInfo:", parseError);
+        setError("Le format des Informations Système (JSON) est invalide. Veuillez vérifier la syntaxe.");
+        setIsLoadingForm(false);
+        return;
+      }
+    }
+
     try {
-      const payload: SubmitDiagnosticPayload = { problemDescription };
+      const payload: SubmitDiagnosticPayload = { problemDescription, systemInfo };
+      // console.log("[App.tsx handleFormSubmit] Submitting with payload:", payload);
       const response = await submitDiagnostic(payload);
-      console.log("[App.tsx handleFormSubmit] Submission successful, taskId:", response.taskId);
       setTaskId(response.taskId);
-      setIsLoadingReport(true); // Start loading report
+      setIsLoadingReport(true);
     } catch (err) {
       console.error("[App.tsx handleFormSubmit] Erreur lors de la soumission du diagnostic:", err);
       let detailedError = "Impossible de soumettre la demande de diagnostic. Veuillez réessayer.";
@@ -32,7 +43,7 @@ const App: React.FC = () => {
         if (err.response) {
           detailedError += ` (Erreur ${err.response.status}: ${err.response.data?.message || err.message})`;
         } else if (err.request) {
-          detailedError += ` (Le serveur n'a pas répondu. Vérifiez la connexion et si le backend est démarré.)`;
+          detailedError += ` (Le serveur n'a pas répondu.)`;
         } else {
           detailedError += ` (${err.message})`;
         }
@@ -40,28 +51,20 @@ const App: React.FC = () => {
         detailedError += ` (${err.message})`;
       }
       setError(detailedError);
-      setReportData(null);
     } finally {
       setIsLoadingForm(false);
     }
   };
   
   const pollReport = useCallback(async (currentTaskId: string) => {
-    console.log(`[App.tsx pollReport] Polling for taskId: ${currentTaskId}`);
     try {
       const report = await getDiagnosticReport(currentTaskId);
-      console.log(`[App.tsx pollReport] Received report for ${currentTaskId}:`, JSON.parse(JSON.stringify(report))); // Deep copy for logging
       setReportData(report);
       
       if (report.status === DiagnosticTaskStatus.PENDING || report.status === DiagnosticTaskStatus.PROCESSING) {
-        console.log(`[App.tsx pollReport] Task ${currentTaskId} is ${report.status}. Continuing polling.`);
         return true; // Continue polling
       } else {
-        console.log(`[App.tsx pollReport] Task ${currentTaskId} is ${report.status}. Stopping polling.`);
         setIsLoadingReport(false); // Stop loading indicator
-        if (report.status === DiagnosticTaskStatus.FAILED && report.errorDetails) {
-          // setError(`Le diagnostic a échoué: ${report.errorDetails}`); // Let ReportDisplay handle it or set a general error
-        }
         return false; // Stop polling
       }
     } catch (err) {
@@ -74,7 +77,7 @@ const App: React.FC = () => {
         }
       setError(pollErrorMsg);
       setIsLoadingReport(false);
-      setReportData(prev => {
+      setReportData(prev => { // Set a minimal failed report structure
         const existingData = prev && prev.taskId === currentTaskId ? prev : null;
         return {
           taskId: currentTaskId,
@@ -88,40 +91,26 @@ const App: React.FC = () => {
     }
   }, []);
 
-
   useEffect(() => {
     let intervalId: NodeJS.Timeout | undefined;
-    console.log(`[App.tsx useEffect] taskId: ${taskId}, isLoadingReport: ${isLoadingReport}`);
-
     if (taskId && isLoadingReport) {
-      console.log(`[App.tsx useEffect] Initial poll for ${taskId}`);
       pollReport(taskId).then(shouldContinuePolling => {
         if (shouldContinuePolling) {
-          console.log(`[App.tsx useEffect] Setting up interval polling for ${taskId}`);
           intervalId = setInterval(async () => {
             if (!taskId) { 
-                 console.log(`[App.tsx useEffect interval] taskId became null, clearing interval.`);
                  clearInterval(intervalId);
                  return;
             }
-            console.log(`[App.tsx useEffect interval] Polling for ${taskId}`);
             const keepPolling = await pollReport(taskId);
             if (!keepPolling) {
-              console.log(`[App.tsx useEffect interval] Stopping polling for ${taskId}, clearing interval.`);
               clearInterval(intervalId);
             }
           }, 3000);
-        } else {
-          console.log(`[App.tsx useEffect] Initial poll for ${taskId} indicated no further polling needed.`);
         }
       });
-    } else {
-      console.log(`[App.tsx useEffect] Conditions not met for polling (taskId: ${taskId}, isLoadingReport: ${isLoadingReport}).`);
     }
-    
     return () => {
       if (intervalId) {
-        console.log(`[App.tsx useEffect cleanup] Clearing interval for taskId: ${taskId}`);
         clearInterval(intervalId);
       }
     };
@@ -161,7 +150,6 @@ const App: React.FC = () => {
            <div className="mt-8 text-center animate-fade-in">
             <button 
               onClick={() => {
-                console.log("[App.tsx] Clicked 'Effectuer un nouveau diagnostic'");
                 setTaskId(null);
                 setReportData(null);
                 setError(null);

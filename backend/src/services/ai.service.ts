@@ -1,7 +1,6 @@
-import { DiagnosticTaskStatus } from '../models/diagnosticTask.model'; // Le chemin est maintenant correct
+import { DiagnosticTaskStatus, SystemInfo } from '../models/diagnosticTask.model';
 
-// Simule une interaction avec un service d'IA pour le diagnostic
-export const processWithAI = async (systemInfo: any, userProblem?: string): Promise<any> => {
+export const processWithAI = async (systemInfo: SystemInfo, userProblem?: string): Promise<any> => {
   console.log('[ai.service]: Début du traitement IA (simulation).');
   console.log('[ai.service]: Informations système reçues:', JSON.stringify(systemInfo, null, 2));
   if (userProblem) {
@@ -9,48 +8,97 @@ export const processWithAI = async (systemInfo: any, userProblem?: string): Prom
   }
 
   // Simuler un délai de traitement
-  await new Promise(resolve => setTimeout(resolve, 3000)); // 3 secondes de délai
+  await new Promise(resolve => setTimeout(resolve, 1000)); 
+
+  // Helper pour parser les valeurs de mémoire qui peuvent être "N/A" ou des string numériques
+  const parseMemory = (memValueStr: string | undefined): number | null => {
+    if (memValueStr === undefined || memValueStr === null || memValueStr.trim().toUpperCase() === "N/A" || memValueStr.trim() === "") {
+      return null;
+    }
+    const parsed = parseFloat(memValueStr);
+    return isNaN(parsed) ? null : parsed;
+  };
+
+  // Convertir en chaîne de caractères avant de parser, pour satisfaire la signature de parseMemory
+  // et gérer le type string | number de SystemInfo.
+  const totalMemoryMBString = typeof systemInfo.totalMemoryMB === 'number' 
+    ? String(systemInfo.totalMemoryMB) 
+    : systemInfo.totalMemoryMB;
+  const freeMemoryMBString = typeof systemInfo.freeMemoryMB === 'number'
+    ? String(systemInfo.freeMemoryMB)
+    : systemInfo.freeMemoryMB;
+
+  const totalMemory = parseMemory(totalMemoryMBString);
+  const freeMemory = parseMemory(freeMemoryMBString);
+
+  let primaryIpAddress = 'N/A';
+  if (systemInfo.networkInterfaces) {
+    for (const ifaceName in systemInfo.networkInterfaces) {
+      const ifaceDetails = systemInfo.networkInterfaces[ifaceName];
+      if (ifaceDetails) {
+        const ipv4 = ifaceDetails.find(details => details.family === 'IPv4' && !details.internal);
+        if (ipv4) {
+          primaryIpAddress = ipv4.address;
+          break;
+        }
+      }
+    }
+  }
+  
+  const cpuModel = systemInfo.cpus && systemInfo.cpus.length > 0 ? systemInfo.cpus[0].model : 'N/A';
+  const cpuSpeed = systemInfo.cpus && systemInfo.cpus.length > 0 ? systemInfo.cpus[0].speed : 'N/A';
+
+  // Déterminer le statut de la mémoire
+  let memoryStatus = 'Normal';
+  if (freeMemory !== null) {
+    if (totalMemory !== null && totalMemory > 0 && (freeMemory / totalMemory) < 0.1) { // Moins de 10% de RAM libre
+        memoryStatus = 'Critiquement Faible';
+    } else if (freeMemory < 1024) { // Moins de 1GB de RAM libre
+        memoryStatus = 'Faible';
+    }
+  }
+
 
   // Générer un rapport de diagnostic simulé
   const report = {
-    summary: `Diagnostic basé sur le problème: "${userProblem || 'Non spécifié'}".`,
+    summary: `Diagnostic basé sur le problème: "${userProblem || 'Non spécifié'}" et les informations système fournies.`,
     analysis: [
       {
         component: 'CPU',
-        status: systemInfo.cpu?.usage > 80 ? 'Surchargé' : 'Normal',
-        details: `Utilisation CPU: ${systemInfo.cpu?.usage || 'N/A'}%. Température: ${systemInfo.cpu?.temperature || 'N/A'}°C.`,
-        recommendation: systemInfo.cpu?.usage > 80 ? 'Vérifier les processus consommant beaucoup de CPU. Envisager un meilleur refroidissement.' : 'Aucune action requise.',
+        status: 'Normal (simulation)', 
+        details: `Modèle: ${cpuModel}. Vitesse: ${cpuSpeed}MHz. Usage/Température: Non collectés par l'agent.`,
+        recommendation: 'Vérifier les processus consommant beaucoup de CPU si des lenteurs sont observées. Envisager un meilleur refroidissement si applicable.',
       },
       {
         component: 'Mémoire (RAM)',
-        status: systemInfo.memory?.free < 1024 ? 'Faible' : 'Normal', // Supposons que 'free' est en MB
-        details: `Mémoire totale: ${systemInfo.memory?.total || 'N/A'}MB. Mémoire libre: ${systemInfo.memory?.free || 'N/A'}MB.`,
-        recommendation: systemInfo.memory?.free < 1024 ? 'Fermer les applications inutiles ou envisager une mise à niveau de la RAM.' : 'Aucune action requise.',
+        status: memoryStatus,
+        details: `Mémoire totale: ${systemInfo.totalMemoryMB || 'N/A'}MB. Mémoire libre: ${systemInfo.freeMemoryMB || 'N/A'}MB.`,
+        recommendation: (memoryStatus === 'Faible' || memoryStatus === 'Critiquement Faible') ? 'Fermer les applications inutiles ou envisager une mise à niveau de la RAM.' : 'Aucune action spécifique requise basée sur la mémoire libre.',
       },
       {
         component: 'Disque',
-        status: systemInfo.disk?.freeSpace < 50000 ? 'Faible espace disque' : 'Normal', // Supposons que 'freeSpace' est en MB
-        details: `Espace total: ${systemInfo.disk?.totalSpace || 'N/A'}GB. Espace libre: ${systemInfo.disk?.freeSpace || 'N/A'}MB.`,
-        recommendation: systemInfo.disk?.freeSpace < 50000 ? 'Libérer de l\'espace disque en supprimant les fichiers inutiles.' : 'Aucune action requise.',
+        status: 'Information non disponible', 
+        details: `Informations disque: ${systemInfo.diskInfo || 'Non collecté par l\'agent'}.`,
+        recommendation: 'Si des problèmes de stockage ou de performance disque sont suspectés, utiliser les outils système pour vérifier l\'espace et la santé du disque.',
       },
       {
         component: 'Réseau',
-        status: systemInfo.network?.pingTime > 100 ? 'Latence élevée' : 'Normal',
-        details: `Adresse IP: ${systemInfo.network?.ipAddress || 'N/A'}. Temps de ping vers google.com: ${systemInfo.network?.pingTime || 'N/A'}ms.`,
-        recommendation: systemInfo.network?.pingTime > 100 ? 'Vérifier la connexion Internet, redémarrer le routeur ou contacter le FAI.' : 'Aucune action requise.',
+        status: 'Normal (simulation)', 
+        details: `Adresse IP principale (détectée): ${primaryIpAddress}. Ping: Non collecté par l'agent.`,
+        recommendation: 'Si des problèmes de réseau sont suspectés, vérifier la connexion Internet, redémarrer le routeur ou contacter le FAI.',
       }
     ],
     potentialCauses: [
-      'Surchauffe du CPU due à une mauvaise ventilation ou à un overclocking excessif.',
-      'Manque de mémoire vive (RAM) pour les applications en cours d\'exécution.',
-      'Espace disque insuffisant, affectant les performances générales et la capacité de stockage.',
+      'Surchauffe du CPU due à une mauvaise ventilation ou à un overclocking excessif (si applicable).',
+      'Manque de mémoire vive (RAM) pour les applications en cours d\'exécution (si la mémoire libre est effectivement basse).',
+      'Espace disque insuffisant (si applicable, non vérifié par l\'agent).',
       'Problèmes de connectivité réseau ou configuration incorrecte.',
       userProblem?.toLowerCase().includes('lent') ? 'Logiciels malveillants ou trop de programmes au démarrage.' : 'Cause spécifique liée au problème décrit par l\'utilisateur.',
     ],
     suggestedSolutions: [
       'Nettoyer les ventilateurs et le dissipateur thermique du CPU.',
-      'Fermer les applications gourmandes en ressources ou ajouter plus de RAM.',
-      'Utiliser l\'outil de nettoyage de disque pour libérer de l\'espace.',
+      'Fermer les applications gourmandes en ressources ou ajouter plus de RAM si nécessaire.',
+      'Utiliser l\'outil de nettoyage de disque pour libérer de l\'espace (si applicable).',
       'Redémarrer le modem/routeur et vérifier les câbles réseau.',
       userProblem?.toLowerCase().includes('lent') ? 'Effectuer une analyse antivirus/antimalware et optimiser les programmes de démarrage.' : 'Suivre les recommandations spécifiques aux composants.',
       'Mettre à jour les pilotes (drivers) du matériel.',
