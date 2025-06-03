@@ -1,4 +1,4 @@
-import { DiagnosticTaskStatus } from '../models/diagnosticTask.model';
+import { DiagnosticTaskStatus } from '../models/diagnosticTask.model'; // Le chemin est maintenant correct
 
 // Simule une interaction avec un service d'IA pour le diagnostic
 export const processWithAI = async (systemInfo: any, userProblem?: string): Promise<any> => {
@@ -23,13 +23,13 @@ export const processWithAI = async (systemInfo: any, userProblem?: string): Prom
       },
       {
         component: 'Mémoire (RAM)',
-        status: systemInfo.memory?.free < 1024 ? 'Faible' : 'Normal',
+        status: systemInfo.memory?.free < 1024 ? 'Faible' : 'Normal', // Supposons que 'free' est en MB
         details: `Mémoire totale: ${systemInfo.memory?.total || 'N/A'}MB. Mémoire libre: ${systemInfo.memory?.free || 'N/A'}MB.`,
         recommendation: systemInfo.memory?.free < 1024 ? 'Fermer les applications inutiles ou envisager une mise à niveau de la RAM.' : 'Aucune action requise.',
       },
       {
         component: 'Disque',
-        status: systemInfo.disk?.freeSpace < 50000 ? 'Faible espace disque' : 'Normal',
+        status: systemInfo.disk?.freeSpace < 50000 ? 'Faible espace disque' : 'Normal', // Supposons que 'freeSpace' est en MB
         details: `Espace total: ${systemInfo.disk?.totalSpace || 'N/A'}GB. Espace libre: ${systemInfo.disk?.freeSpace || 'N/A'}MB.`,
         recommendation: systemInfo.disk?.freeSpace < 50000 ? 'Libérer de l\'espace disque en supprimant les fichiers inutiles.' : 'Aucune action requise.',
       },

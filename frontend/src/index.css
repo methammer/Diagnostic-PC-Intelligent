@@ -1,5 +1,8 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import "tw-animate-css"; /* Conservez ceci si tw-animate-css est un fichier CSS valide ou une bibliothèque correctement configurée pour l'importation CSS */
 
 @custom-variant dark (&:is(.dark *));
 
