@@ -24,7 +24,7 @@ export interface SystemInfo {
 
 export interface SubmitDiagnosticPayload {
   problemDescription?: string;
-  systemInfo?: SystemInfo; // Pour l'instant, on ne l'enverra pas depuis le frontend
+  systemInfo?: SystemInfo;
 }
 
 export interface SubmitDiagnosticResponse {
@@ -44,11 +44,18 @@ export interface DiagnosticReport {
 }
 
 export const submitDiagnostic = async (payload: SubmitDiagnosticPayload): Promise<SubmitDiagnosticResponse> => {
-  const { data } = await apiClient.post<SubmitDiagnosticResponse>('/collecte', payload);
+  // Ensure systemInfo is at least an empty object if not provided,
+  // as middleware might expect the key to be present.
+  const payloadToSend: SubmitDiagnosticPayload = {
+    problemDescription: payload.problemDescription,
+    systemInfo: payload.systemInfo || {},
+  };
+  const { data } = await apiClient.post<SubmitDiagnosticResponse>('/collecte', payloadToSend);
   return data;
 };
 
 export const getDiagnosticReport = async (taskId: string): Promise<DiagnosticReport> => {
-  const { data } = await apiClient.get<DiagnosticReport>(`/report/${taskId}`);
+  // Corrected path from /report/:taskId to /diagnostic/:taskId to match backend routes
+  const { data } = await apiClient.get<DiagnosticReport>(`/diagnostic/${taskId}`);
   return data;
 };

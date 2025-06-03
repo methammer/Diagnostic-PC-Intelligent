@@ -13,6 +13,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const handleFormSubmit = async (problemDescription: string) => {
+    console.log("[App.tsx handleFormSubmit] Submitting diagnostic with description:", problemDescription);
     setIsLoadingForm(true);
     setError(null);
     setReportData(null);
@@ -21,20 +22,18 @@ const App: React.FC = () => {
     try {
       const payload: SubmitDiagnosticPayload = { problemDescription };
       const response = await submitDiagnostic(payload);
+      console.log("[App.tsx handleFormSubmit] Submission successful, taskId:", response.taskId);
       setTaskId(response.taskId);
-      setIsLoadingReport(true);
+      setIsLoadingReport(true); // Start loading report
     } catch (err) {
-      console.error("Erreur lors de la soumission du diagnostic:", err);
+      console.error("[App.tsx handleFormSubmit] Erreur lors de la soumission du diagnostic:", err);
       let detailedError = "Impossible de soumettre la demande de diagnostic. Veuillez réessayer.";
       if (axios.isAxiosError(err)) {
         if (err.response) {
-          // Error response from server
           detailedError += ` (Erreur ${err.response.status}: ${err.response.data?.message || err.message})`;
         } else if (err.request) {
-          // Request made but no response received (e.g., network error, server down)
           detailedError += ` (Le serveur n'a pas répondu. Vérifiez la connexion et si le backend est démarré.)`;
         } else {
-          // Other errors
           detailedError += ` (${err.message})`;
         }
       } else if (err instanceof Error) {
@@ -48,23 +47,25 @@ const App: React.FC = () => {
   };
   
   const pollReport = useCallback(async (currentTaskId: string) => {
+    console.log(`[App.tsx pollReport] Polling for taskId: ${currentTaskId}`);
     try {
       const report = await getDiagnosticReport(currentTaskId);
+      console.log(`[App.tsx pollReport] Received report for ${currentTaskId}:`, JSON.parse(JSON.stringify(report))); // Deep copy for logging
       setReportData(report);
       
       if (report.status === DiagnosticTaskStatus.PENDING || report.status === DiagnosticTaskStatus.PROCESSING) {
-        return true; 
+        console.log(`[App.tsx pollReport] Task ${currentTaskId} is ${report.status}. Continuing polling.`);
+        return true; // Continue polling
       } else {
-        // COMPLETED or FAILED (now with 200 OK), stop polling
-        setIsLoadingReport(false);
+        console.log(`[App.tsx pollReport] Task ${currentTaskId} is ${report.status}. Stopping polling.`);
+        setIsLoadingReport(false); // Stop loading indicator
         if (report.status === DiagnosticTaskStatus.FAILED && report.errorDetails) {
-          // You might want to set a general error message or let ReportDisplay handle it
-          // setError(`Le diagnostic a échoué: ${report.errorDetails}`);
+          // setError(`Le diagnostic a échoué: ${report.errorDetails}`); // Let ReportDisplay handle it or set a general error
         }
-        return false; 
+        return false; // Stop polling
       }
     } catch (err) {
-      console.error(`Erreur lors de la récupération du rapport pour la tâche ${currentTaskId}:`, err);
+      console.error(`[App.tsx pollReport] Error polling for ${currentTaskId}:`, err);
       let pollErrorMsg = `Erreur lors de la récupération du rapport. (ID: ${currentTaskId})`;
        if (axios.isAxiosError(err) && err.response) {
           pollErrorMsg += ` (Status: ${err.response.status} - ${err.response.data?.message || err.message})`;
@@ -73,7 +74,6 @@ const App: React.FC = () => {
         }
       setError(pollErrorMsg);
       setIsLoadingReport(false);
-      // Update report data to reflect the failure if possible
       setReportData(prev => {
         const existingData = prev && prev.taskId === currentTaskId ? prev : null;
         return {
@@ -84,32 +84,44 @@ const App: React.FC = () => {
           problemDescription: existingData?.problemDescription,
         };
       });
-      return false;
+      return false; // Stop polling due to error
     }
   }, []);
 
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | undefined;
+    console.log(`[App.tsx useEffect] taskId: ${taskId}, isLoadingReport: ${isLoadingReport}`);
 
     if (taskId && isLoadingReport) {
+      console.log(`[App.tsx useEffect] Initial poll for ${taskId}`);
       pollReport(taskId).then(shouldContinuePolling => {
         if (shouldContinuePolling) {
+          console.log(`[App.tsx useEffect] Setting up interval polling for ${taskId}`);
           intervalId = setInterval(async () => {
-            if (!taskId) { // Ensure taskId is still set before polling
+            if (!taskId) { 
+                 console.log(`[App.tsx useEffect interval] taskId became null, clearing interval.`);
                  clearInterval(intervalId);
                  return;
             }
+            console.log(`[App.tsx useEffect interval] Polling for ${taskId}`);
             const keepPolling = await pollReport(taskId);
             if (!keepPolling) {
+              console.log(`[App.tsx useEffect interval] Stopping polling for ${taskId}, clearing interval.`);
               clearInterval(intervalId);
             }
           }, 3000);
+        } else {
+          console.log(`[App.tsx useEffect] Initial poll for ${taskId} indicated no further polling needed.`);
         }
       });
+    } else {
+      console.log(`[App.tsx useEffect] Conditions not met for polling (taskId: ${taskId}, isLoadingReport: ${isLoadingReport}).`);
     }
+    
     return () => {
       if (intervalId) {
+        console.log(`[App.tsx useEffect cleanup] Clearing interval for taskId: ${taskId}`);
         clearInterval(intervalId);
       }
     };
@@ -149,6 +161,7 @@ const App: React.FC = () => {
            <div className="mt-8 text-center animate-fade-in">
             <button 
               onClick={() => {
+                console.log("[App.tsx] Clicked 'Effectuer un nouveau diagnostic'");
                 setTaskId(null);
                 setReportData(null);
                 setError(null);
