@@ -1,67 +1,61 @@
 import { Request, Response } from 'express';
 import { processWithAI } from '../services/ai.service';
-import { DiagnosticTask, DiagnosticTaskStatus } from '../models/diagnosticTask.model'; // Importer DiagnosticTaskStatus
+import { DiagnosticTask, DiagnosticTaskStatus, SystemInfo } from '../models/diagnosticTask.model';
 
-// Simuler une base de données en mémoire pour les tâches
 const tasksDB: Map<string, DiagnosticTask> = new Map();
-
 
 export const submitDiagnosticData = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { problemDescription, systemInfo } = req.body;
+    // Enhanced logging:
+    console.log('============================================================');
+    console.log('[diagnostic.controller] Received request for /api/collecte.');
+    console.log('[diagnostic.controller] Request Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('[diagnostic.controller] Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('============================================================');
+
+    const { problemDescription, systemInfo } = req.body as { problemDescription?: string, systemInfo?: SystemInfo };
+
+    // Log the destructured values
+    console.log(`[diagnostic.controller] Destructured problemDescription: '${problemDescription}' (type: ${typeof problemDescription})`);
+    console.log(`[diagnostic.controller] Destructured systemInfo: ${systemInfo ? JSON.stringify(systemInfo).substring(0,100)+'...' : 'undefined'} (type: ${typeof systemInfo})`);
+
 
     if (!problemDescription && !systemInfo) {
+      console.error('[diagnostic.controller] Validation failed: problemDescription and systemInfo are both missing or effectively empty.');
       res.status(400).json({ message: 'Aucune donnée de diagnostic fournie (problemDescription ou systemInfo attendu).' });
       return;
     }
     
-    console.log('============================================================');
-    console.log('[diagnostic.controller] Données de diagnostic reçues:');
+    console.log('[diagnostic.controller] Diagnostic data received (after validation):');
     if (problemDescription) {
-      console.log('  Description du problème:', problemDescription);
+      console.log('  Problem Description:', problemDescription);
     }
     if (systemInfo) {
-      console.log('  Informations système (reçues par le backend):');
-      // Log plus détaillé de systemInfo
-      console.log(`    Timestamp: ${systemInfo.timestamp}`);
-      console.log(`    Platform: ${systemInfo.platform} ${systemInfo.release} (${systemInfo.arch})`);
-      console.log(`    Hostname: ${systemInfo.hostname}`);
-      console.log(`    User: ${systemInfo.userInfo?.username}`);
-      console.log(`    Uptime (s): ${systemInfo.uptime}`);
-      console.log(`    Memory: ${systemInfo.freeMemoryMB}MB free / ${systemInfo.totalMemoryMB}MB total`);
-      console.log(`    CPUs: ${systemInfo.cpuCount} cores`);
-      if (systemInfo.cpus && systemInfo.cpus.length > 0) {
-        console.log(`      Model: ${systemInfo.cpus[0].model}`);
-      }
-      console.log('    Network Interfaces (nombre):', systemInfo.networkInterfaces ? Object.keys(systemInfo.networkInterfaces).length : 'N/A');
-      console.log('    Disk Info:', systemInfo.diskInfo);
-      console.log('  (Fin des Informations système reçues par le backend)');
+      console.log('  System Information (from request):', JSON.stringify(systemInfo, null, 2).substring(0, 200) + '...');
     }
     console.log('============================================================');
-
 
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     
     const newTask: DiagnosticTask = {
       id: taskId,
-      status: DiagnosticTaskStatus.PENDING, // Correction ici
+      status: DiagnosticTaskStatus.PENDING,
       submittedAt: new Date(),
       problemDescription,
       systemInfo,
     };
     tasksDB.set(taskId, newTask);
 
-    // Simuler un traitement asynchrone
     setTimeout(async () => {
       try {
         const task = tasksDB.get(taskId);
         if (task) {
-          task.status = DiagnosticTaskStatus.PROCESSING; // Correction ici
+          task.status = DiagnosticTaskStatus.PROCESSING;
           tasksDB.set(taskId, task);
           console.log(`[Task ${taskId}]: Début du traitement AI.`);
-          const aiReport = await processWithAI(task.systemInfo || {}, task.problemDescription);
+          const aiReport = await processWithAI(task.systemInfo || {} as SystemInfo, task.problemDescription);
           task.report = aiReport;
-          task.status = DiagnosticTaskStatus.COMPLETED; // Correction ici
+          task.status = DiagnosticTaskStatus.COMPLETED;
           task.completedAt = new Date();
           tasksDB.set(taskId, task);
           console.log(`[Task ${taskId}]: Traitement AI terminé. Rapport généré.`);
@@ -69,15 +63,16 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
       } catch (aiError) {
         const task = tasksDB.get(taskId);
         if (task) {
-          task.status = DiagnosticTaskStatus.FAILED; // Correction ici
-          task.report = { error: 'Erreur lors du traitement AI.', details: aiError instanceof Error ? aiError.message : String(aiError) };
-          task.error = aiError instanceof Error ? aiError.message : String(aiError);
+          task.status = DiagnosticTaskStatus.FAILED;
+          const errorMessage = aiError instanceof Error ? aiError.message : String(aiError);
+          task.report = { error: 'Erreur lors du traitement AI.', details: errorMessage };
+          task.error = errorMessage;
           task.completedAt = new Date();
           tasksDB.set(taskId, task);
         }
         console.error(`[Task ${taskId}]: Erreur lors du traitement AI:`, aiError);
       }
-    }, 5000); // Simuler un délai de 5 secondes pour le traitement
+    }, 5000); 
 
     res.status(202).json({ 
       message: 'Données de diagnostic reçues, traitement en cours.',
@@ -99,42 +94,50 @@ export const getDiagnosticReport = async (req: Request, res: Response): Promise<
       return;
     }
 
-    if (task.status === DiagnosticTaskStatus.PENDING || task.status === DiagnosticTaskStatus.PROCESSING) { // Correction ici
+    if (task.status === DiagnosticTaskStatus.PENDING || task.status === DiagnosticTaskStatus.PROCESSING) {
       res.status(202).json({ 
         taskId: task.id,
         status: task.status,
-        message: 'Le rapport de diagnostic est en cours de traitement. Veuillez réessayer plus tard.'
+        submittedAt: task.submittedAt.toISOString(),
+        problemDescription: task.problemDescription,
+        message: task.status === DiagnosticTaskStatus.PENDING ? 'Le diagnostic est en attente de traitement.' : 'Le rapport de diagnostic est en cours de traitement. Veuillez réessayer plus tard.'
       });
       return;
     }
     
-    if (task.status === DiagnosticTaskStatus.FAILED) { // Correction ici
-       res.status(500).json({
+    if (task.status === DiagnosticTaskStatus.FAILED) {
+       res.status(200).json({
         taskId: task.id,
         status: task.status,
-        message: 'Le traitement du diagnostic a échoué.',
-        errorDetails: task.error,
-        report: task.report,
+        submittedAt: task.submittedAt.toISOString(),
+        completedAt: task.completedAt?.toISOString(),
+        problemDescription: task.problemDescription,
+        errorDetails: `Le traitement du diagnostic a échoué. ${task.error ? `Détails: ${task.error}` : 'Aucun détail supplémentaire.'}`,
+        diagnosticReport: task.report,
       });
       return;
     }
 
-    if (task.status === DiagnosticTaskStatus.COMPLETED && task.report) { // Correction ici
+    if (task.status === DiagnosticTaskStatus.COMPLETED && task.report) {
       res.status(200).json({
         taskId: task.id,
         status: task.status,
         submittedAt: task.submittedAt.toISOString(),
         completedAt: task.completedAt?.toISOString(),
         problemDescription: task.problemDescription,
-        // systemInfoSnapshot: task.systemInfo, // Optionnel: renvoyer un snapshot des infos système
         diagnosticReport: task.report,
       });
     } else {
-      // Ce cas devrait être moins probable si les statuts sont bien gérés
-      res.status(404).json({ message: `Rapport pour la tâche ${taskId} est incomplet ou non disponible (statut: ${task.status}).` });
+      res.status(404).json({ 
+        message: `Rapport pour la tâche ${taskId} est dans un état inattendu ou incomplet (statut: ${task.status}).`,
+        taskId: task.id,
+        status: task.status,
+        submittedAt: task.submittedAt.toISOString(),
+      });
     }
 
-  } catch (error) {
+  } catch (error)
+{
     console.error('Erreur lors de la récupération du rapport de diagnostic:', error);
     res.status(500).json({ message: 'Erreur interne du serveur lors de la récupération du rapport.' });
   }
