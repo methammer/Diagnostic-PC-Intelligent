@@ -1,15 +1,8 @@
 import { Request, Response } from 'express';
-import { processWithAI } from '../services/ai.service'; // Assurez-vous que ce service existe
+import { processWithAI } from '../services/ai.service';
+import { DiagnosticTask, DiagnosticTaskStatus } from '../models/diagnosticTask.model'; // Importer DiagnosticTaskStatus
 
 // Simuler une base de données en mémoire pour les tâches
-interface DiagnosticTask {
-  id: string;
-  status: 'Pending' | 'Processing' | 'Completed' | 'Failed';
-  submittedAt: Date;
-  problemDescription?: string;
-  systemInfo?: any;
-  report?: any;
-}
 const tasksDB: Map<string, DiagnosticTask> = new Map();
 
 
@@ -22,15 +15,36 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
       return;
     }
     
-    console.log('Données de diagnostic reçues:');
-    if (problemDescription) console.log('  Description du problème:', problemDescription);
-    if (systemInfo) console.log('  Informations système:', JSON.stringify(systemInfo, null, 2));
+    console.log('============================================================');
+    console.log('[diagnostic.controller] Données de diagnostic reçues:');
+    if (problemDescription) {
+      console.log('  Description du problème:', problemDescription);
+    }
+    if (systemInfo) {
+      console.log('  Informations système (reçues par le backend):');
+      // Log plus détaillé de systemInfo
+      console.log(`    Timestamp: ${systemInfo.timestamp}`);
+      console.log(`    Platform: ${systemInfo.platform} ${systemInfo.release} (${systemInfo.arch})`);
+      console.log(`    Hostname: ${systemInfo.hostname}`);
+      console.log(`    User: ${systemInfo.userInfo?.username}`);
+      console.log(`    Uptime (s): ${systemInfo.uptime}`);
+      console.log(`    Memory: ${systemInfo.freeMemoryMB}MB free / ${systemInfo.totalMemoryMB}MB total`);
+      console.log(`    CPUs: ${systemInfo.cpuCount} cores`);
+      if (systemInfo.cpus && systemInfo.cpus.length > 0) {
+        console.log(`      Model: ${systemInfo.cpus[0].model}`);
+      }
+      console.log('    Network Interfaces (nombre):', systemInfo.networkInterfaces ? Object.keys(systemInfo.networkInterfaces).length : 'N/A');
+      console.log('    Disk Info:', systemInfo.diskInfo);
+      console.log('  (Fin des Informations système reçues par le backend)');
+    }
+    console.log('============================================================');
+
 
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     
     const newTask: DiagnosticTask = {
       id: taskId,
-      status: 'Pending',
+      status: DiagnosticTaskStatus.PENDING, // Correction ici
       submittedAt: new Date(),
       problemDescription,
       systemInfo,
@@ -42,22 +56,23 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
       try {
         const task = tasksDB.get(taskId);
         if (task) {
-          task.status = 'Processing';
+          task.status = DiagnosticTaskStatus.PROCESSING; // Correction ici
           tasksDB.set(taskId, task);
           console.log(`[Task ${taskId}]: Début du traitement AI.`);
-          // Utiliser le service AI pour générer le rapport
-          // Ici, nous passons systemInfo et problemDescription au service AI
           const aiReport = await processWithAI(task.systemInfo || {}, task.problemDescription);
           task.report = aiReport;
-          task.status = 'Completed';
+          task.status = DiagnosticTaskStatus.COMPLETED; // Correction ici
+          task.completedAt = new Date();
           tasksDB.set(taskId, task);
           console.log(`[Task ${taskId}]: Traitement AI terminé. Rapport généré.`);
         }
       } catch (aiError) {
         const task = tasksDB.get(taskId);
         if (task) {
-          task.status = 'Failed';
+          task.status = DiagnosticTaskStatus.FAILED; // Correction ici
           task.report = { error: 'Erreur lors du traitement AI.', details: aiError instanceof Error ? aiError.message : String(aiError) };
+          task.error = aiError instanceof Error ? aiError.message : String(aiError);
+          task.completedAt = new Date();
           tasksDB.set(taskId, task);
         }
         console.error(`[Task ${taskId}]: Erreur lors du traitement AI:`, aiError);
@@ -84,7 +99,7 @@ export const getDiagnosticReport = async (req: Request, res: Response): Promise<
       return;
     }
 
-    if (task.status === 'Pending' || task.status === 'Processing') {
+    if (task.status === DiagnosticTaskStatus.PENDING || task.status === DiagnosticTaskStatus.PROCESSING) { // Correction ici
       res.status(202).json({ 
         taskId: task.id,
         status: task.status,
@@ -93,29 +108,30 @@ export const getDiagnosticReport = async (req: Request, res: Response): Promise<
       return;
     }
     
-    if (task.status === 'Failed') {
+    if (task.status === DiagnosticTaskStatus.FAILED) { // Correction ici
        res.status(500).json({
         taskId: task.id,
         status: task.status,
         message: 'Le traitement du diagnostic a échoué.',
-        errorDetails: task.report?.error,
-        report: task.report, // Inclure le rapport d'erreur s'il existe
+        errorDetails: task.error,
+        report: task.report,
       });
       return;
     }
 
-    // Si complété, retourner le rapport généré par l'IA
-    if (task.status === 'Completed' && task.report) {
+    if (task.status === DiagnosticTaskStatus.COMPLETED && task.report) { // Correction ici
       res.status(200).json({
         taskId: task.id,
         status: task.status,
-        ...task.report, // Étaler le contenu du rapport AI ici
-        // Assurez-vous que le rapport AI contient déjà un timestamp ou ajoutez-le ici
-        timestamp: task.report.generatedAt || new Date(task.submittedAt).toISOString(), 
+        submittedAt: task.submittedAt.toISOString(),
+        completedAt: task.completedAt?.toISOString(),
+        problemDescription: task.problemDescription,
+        // systemInfoSnapshot: task.systemInfo, // Optionnel: renvoyer un snapshot des infos système
+        diagnosticReport: task.report,
       });
     } else {
-      // Fallback si le rapport n'est pas là pour une raison inconnue malgré le statut 'Completed'
-      res.status(404).json({ message: `Rapport pour la tâche ${taskId} est incomplet ou non disponible.` });
+      // Ce cas devrait être moins probable si les statuts sont bien gérés
+      res.status(404).json({ message: `Rapport pour la tâche ${taskId} est incomplet ou non disponible (statut: ${task.status}).` });
     }
 
   } catch (error) {
