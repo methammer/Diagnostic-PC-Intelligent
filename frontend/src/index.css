@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import "tw-animate-css"; /* Conservez ceci si tw-animate-css est un fichier CSS valide ou une bibliothèque correctement configurée pour l'importation CSS */
+/* @import "tw-animate-css"; Supprimé car géré par le plugin tailwindcss-animate */
 
 @custom-variant dark (&:is(.dark *));
 
@@ -26,6 +26,8 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  /* Assurez-vous que --destructive-foreground est défini si vous l'utilisez dans tailwind.config.js */
+  /* Exemple: --destructive-foreground: oklch(0.985 0 0); */
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -45,79 +47,90 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --radius: 0.625rem; /* 10px */
+  --background: oklch(1 0 0); /* Blanc */
+  --foreground: oklch(0.145 0 0); /* Presque Noir */
+  --card: oklch(1 0 0); /* Blanc */
+  --card-foreground: oklch(0.145 0 0); /* Presque Noir */
+  --popover: oklch(1 0 0); /* Blanc */
+  --popover-foreground: oklch(0.145 0 0); /* Presque Noir */
+  --primary: oklch(0.45 0.15 260); /* Un bleu/violet vibrant */
+  --primary-foreground: oklch(0.985 0 0); /* Blanc cassé pour contraste sur primaire */
+  --secondary: oklch(0.97 0.01 260); /* Un gris clair légèrement teinté */
+  --secondary-foreground: oklch(0.205 0 0); /* Noir pour contraste sur secondaire */
+  --muted: oklch(0.97 0.01 260); /* Identique à secondaire pour l'exemple */
+  --muted-foreground: oklch(0.5 0.01 260); /* Gris moyen pour texte discret */
+  --accent: oklch(0.65 0.18 30); /* Un orange/jaune pour accentuation */
+  --accent-foreground: oklch(0.145 0 0); /* Presque Noir pour contraste sur accent */
+  --destructive: oklch(0.577 0.245 27.325); /* Rouge pour erreurs/destructions */
+  --destructive-foreground: oklch(0.985 0 0); /* Blanc cassé pour contraste sur destructive */
+  --border: oklch(0.922 0 0); /* Gris très clair pour bordures */
+  --input: oklch(0.922 0 0); /* Identique à bordure pour fond d'input */
+  --ring: oklch(0.55 0.15 260); /* Bleu/violet plus clair pour anneaux de focus */
+  
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary: oklch(0.45 0.15 260);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-accent: oklch(0.65 0.18 30);
+  --sidebar-accent-foreground: oklch(0.145 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-ring: oklch(0.55 0.15 260);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --background: oklch(0.145 0 0); /* Presque Noir */
+  --foreground: oklch(0.985 0 0); /* Blanc cassé */
+  --card: oklch(0.205 0 0); /* Gris foncé */
+  --card-foreground: oklch(0.985 0 0); /* Blanc cassé */
+  --popover: oklch(0.205 0 0); /* Gris foncé */
+  --popover-foreground: oklch(0.985 0 0); /* Blanc cassé */
+  --primary: oklch(0.55 0.18 265); /* Un bleu/violet plus clair pour le mode sombre */
+  --primary-foreground: oklch(0.145 0 0); /* Presque Noir pour contraste sur primaire sombre */
+  --secondary: oklch(0.269 0.01 260); /* Gris moyen-foncé */
+  --secondary-foreground: oklch(0.985 0 0); /* Blanc cassé */
+  --muted: oklch(0.269 0.01 260);
+  --muted-foreground: oklch(0.7 0.01 260); /* Gris clair pour texte discret sombre */
+  --accent: oklch(0.7 0.2 35); /* Orange/jaune plus saturé pour mode sombre */
+  --accent-foreground: oklch(0.145 0 0); /* Presque Noir */
+  --destructive: oklch(0.65 0.22 25); /* Rouge plus clair pour mode sombre */
+  --destructive-foreground: oklch(0.985 0 0); /* Blanc cassé */
+  --border: oklch(0.269 0.01 260 / 0.5); /* Gris moyen-foncé semi-transparent pour bordures */
+  --input: oklch(0.269 0.01 260 / 0.6); /* Fond d'input légèrement plus opaque */
+  --ring: oklch(0.6 0.18 265); /* Bleu/violet pour anneaux de focus en mode sombre */
+
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-primary: oklch(0.55 0.18 265);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-accent: oklch(0.7 0.2 35);
+  --sidebar-accent-foreground: oklch(0.145 0 0);
+  --sidebar-border: oklch(0.269 0.01 260 / 0.5);
+  --sidebar-ring: oklch(0.6 0.18 265);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring/50; /* Applique la couleur de bordure et d'outline par défaut */
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground; /* Applique les couleurs de fond et de texte par défaut au body */
+    font-family: 'Inter', sans-serif; /* Suggestion d'une police sans-serif propre */
   }
 }
+
+/* Vous pouvez ajouter ici une importation de police si vous le souhaitez, par exemple Google Fonts */
+/* @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'); */
+/* Si vous décommentez ceci, assurez-vous que la police est également ajoutée à votre index.html ou configurée via Tailwind. */
