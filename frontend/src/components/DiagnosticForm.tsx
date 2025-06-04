@@ -41,48 +41,30 @@ const DiagnosticForm: React.FC<DiagnosticFormProps> = ({ onSubmit, isLoading }) 
         {descriptionError && <p className="text-xs text-red-600 mt-1">{descriptionError}</p>}
       </div>
 
-      <div className="space-y-3">
-        <p className="text-sm font-medium text-gray-700">
-          Collecte des Informations Système :
+      <div>
+        <label htmlFor="systemInfoJSON" className="block text-sm font-medium text-gray-700 mb-1">
+          Informations Système (JSON) :
+        </label>
+        <p className="text-xs text-gray-500 mb-2">
+          Exécutez l'agent de diagnostic (<code>node agent/main.js</code>), copiez la sortie JSON et collez-la ici.
+          Laissez vide si vous n'avez pas ces informations.
         </p>
-        <a
-          href="/diagnostic-agent.js"
-          download="diagnostic-agent.js"
-          className="btn btn-outline w-full flex items-center justify-center space-x-2"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-          <span>Télécharger l'Agent de Diagnostic</span>
-        </a>
-        <p className="text-xs text-gray-500">
-          1. Téléchargez l'agent ci-dessus.
-          <br />
-          2. Exécutez-le sur votre PC avec Node.js: <code>node diagnostic-agent.js</code>
-          <br />
-          3. Copiez la sortie JSON complète générée par l'agent.
-          <br />
-          4. Collez-la dans le champ ci-dessous.
-        </p>
-        <div>
-          <label htmlFor="systemInfoJSON" className="block text-sm font-medium text-gray-700 mb-1">
-            Collez ici les Informations Système (JSON) :
-          </label>
-          <textarea
-            id="systemInfoJSON"
-            name="systemInfoJSON"
-            rows={8}
-            className="input-field font-mono text-xs"
-            value={systemInfoJSON}
-            onChange={(e) => setSystemInfoJSON(e.target.value)}
-            placeholder='Collez ici le JSON fourni par "diagnostic-agent.js"...'
-          />
-        </div>
+        <textarea
+          id="systemInfoJSON"
+          name="systemInfoJSON"
+          rows={8}
+          className="input-field font-mono text-xs"
+          value={systemInfoJSON}
+          onChange={(e) => setSystemInfoJSON(e.target.value)}
+          placeholder='Collez ici le JSON fourni par "agent/main.js"...'
+        />
       </div>
 
       <div>
         <button
           type="submit"
           className="btn btn-primary w-full flex justify-center items-center"
-          disabled={isLoading || !problemDescription.trim()}
+          disabled={isLoading}
         >
           {isLoading ? (
             <>
