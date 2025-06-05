@@ -1,7 +1,5 @@
+// Agent Version: 1.0.2 (Forced JS content by Bolt)
 import os from 'os';
-// Removed axios import as we are not sending data directly anymore
-
-// const BACKEND_URL = process.env.BACKEND_API_URL || 'http://localhost:3001/api/collecte'; // Not needed for now
 
 async function collectSystemInfo() {
   const cpus = os.cpus();
@@ -41,6 +39,16 @@ async function collectSystemInfo() {
   } else {
     // console.warn("WARN: os.freemem() did not return a valid number.");
   }
+  
+  let userInfoData = { username: 'N/A', homedir: 'N/A (os.userInfo not available or failed)' };
+  try {
+    // Attempt to get userInfo, but handle potential errors gracefully
+    const info = os.userInfo();
+    userInfoData.username = info.username;
+    userInfoData.homedir = info.homedir;
+  } catch (e) {
+    console.warn("WARN: os.userInfo() failed. This can happen in restricted environments or older Node.js versions. User info will be marked N/A.", e.message);
+  }
 
   return {
     timestamp: new Date().toISOString(),
@@ -48,10 +56,7 @@ async function collectSystemInfo() {
     release: os.release(),
     arch: os.arch(),
     hostname: os.hostname(),
-    userInfo: {
-      username: os.userInfo().username,
-      homedir: os.userInfo().homedir,
-    },
+    userInfo: userInfoData,
     uptime: os.uptime(),
     totalMemoryMB: totalMemoryMB,
     freeMemoryMB: freeMemoryMB,
@@ -62,13 +67,8 @@ async function collectSystemInfo() {
   };
 }
 
-// Removed sendDiagnosticData function as it's not used by the agent directly anymore
-
 async function main() {
   console.log('Démarrage de l\'agent de diagnostic PC pour la collecte d\'informations...');
-
-  // La description du problème sera saisie dans le frontend.
-  // const problemDescriptionFromArgs = process.argv.slice(2).join(' ');
 
   try {
     const systemInfo = await collectSystemInfo();
@@ -79,7 +79,9 @@ async function main() {
 
   } catch (error) {
     console.error('L\'agent de collecte a rencontré une erreur critique:', error.message);
-    process.exit(1);
+    // Specific check for os.userInfo issues was moved into collectSystemInfo for better encapsulation
+    // The generic error is caught here.
+    // We don't call process.exit(1) to allow users to see any partial info or error messages in the console.
   }
 }
 
