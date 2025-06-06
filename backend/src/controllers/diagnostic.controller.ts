@@ -134,7 +134,7 @@ export const getDiagnosticReport = async (req: Request, res: Response): Promise<
         status: task.status,
         submittedAt: task.submittedAt.toISOString(),
         problemDescription: task.problemDescription,
-        message: task.status === DiagnosticTaskStatus.PENDING ? 'Le diagnostic est en attente de traitement.' : 'Le rapport de diagnostic est en cours de traitement. Veuillez réessayer plus tard.'
+        message: task.status === DiagnosticTaskStatus.PENDING ? 'Le diagnostic est en attente de traitement.' : 'Le rapport de diagnostic est en cours de traitement.'
       });
       return;
     }
