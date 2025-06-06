@@ -1,23 +1,15 @@
 import { Router } from 'express';
-import { body } from 'express-validator';
-import * as diagnosticController from '../controllers/diagnostic.controller';
+import { submitDiagnosticData, getDiagnosticReport } from '../controllers/diagnostic.controller';
+import { validateAndHandle } from '../middlewares/validator.middleware';
 
 const router = Router();
 
-router.post(
-  '/',
-  [
-    body('problemDescription').notEmpty().withMessage('Problem description is required.'),
-    // systemInfoJSON and advancedSystemInfo are optional
-    body('systemInfoJSON').optional().isString(),
-    body('advancedSystemInfo').optional().isString(),
-  ],
-  diagnosticController.createDiagnosticTask
-);
+// Endpoint pour recevoir les données de l'agent
+// POST /api/collecte
+router.post('/collecte', validateAndHandle, submitDiagnosticData);
 
-router.get(
-  '/download-script',
-  diagnosticController.downloadWindowsScript
-);
+// Endpoint pour que le frontend récupère le rapport de diagnostic
+// GET /api/diagnostic/:taskId
+router.get('/diagnostic/:taskId', getDiagnosticReport);
 
 export default router;

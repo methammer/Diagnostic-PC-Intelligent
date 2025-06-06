@@ -1,4 +1,3 @@
-// Agent Version: 1.0.2 (Forced JS content by Bolt)
 import os from 'os';
 
 async function collectSystemInfo() {
@@ -39,16 +38,6 @@ async function collectSystemInfo() {
   } else {
     // console.warn("WARN: os.freemem() did not return a valid number.");
   }
-  
-  let userInfoData = { username: 'N/A', homedir: 'N/A (os.userInfo not available or failed)' };
-  try {
-    // Attempt to get userInfo, but handle potential errors gracefully
-    const info = os.userInfo();
-    userInfoData.username = info.username;
-    userInfoData.homedir = info.homedir;
-  } catch (e) {
-    console.warn("WARN: os.userInfo() failed. This can happen in restricted environments or older Node.js versions. User info will be marked N/A.", e.message);
-  }
 
   return {
     timestamp: new Date().toISOString(),
@@ -56,7 +45,10 @@ async function collectSystemInfo() {
     release: os.release(),
     arch: os.arch(),
     hostname: os.hostname(),
-    userInfo: userInfoData,
+    userInfo: {
+      username: os.userInfo().username,
+      homedir: os.userInfo().homedir,
+    },
     uptime: os.uptime(),
     totalMemoryMB: totalMemoryMB,
     freeMemoryMB: freeMemoryMB,
@@ -79,9 +71,12 @@ async function main() {
 
   } catch (error) {
     console.error('L\'agent de collecte a rencontré une erreur critique:', error.message);
-    // Specific check for os.userInfo issues was moved into collectSystemInfo for better encapsulation
-    // The generic error is caught here.
-    // We don't call process.exit(1) to allow users to see any partial info or error messages in the console.
+    if (error.message.includes('os.userInfo is not a function')) {
+      console.error('Il semble que vous exécutiez ce script dans un environnement où os.userInfo() n\'est pas disponible (par exemple, une ancienne version de Node.js ou un environnement restreint).');
+      console.error('Essayez de commenter la section userInfo dans la fonction collectSystemInfo si le problème persiste.');
+    }
+    // Pour ne pas sortir immédiatement et permettre de voir le JSON partiel si certaines infos ont été collectées
+    // process.exit(1); 
   }
 }
 
