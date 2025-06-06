@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { processWithAI } from '../services/ai.service';
-import { DiagnosticTask, DiagnosticTaskStatus, SystemInfo } from '../models/diagnosticTask.model';
+import { DiagnosticTask, DiagnosticTaskStatus } from '../models/diagnosticTask.model'; // SystemInfo n'est plus utilisé ici directement
 
 const tasksDB: Map<string, DiagnosticTask> = new Map();
 
@@ -8,16 +8,18 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
   try {
     console.log('============================================================');
     console.log('[diagnostic.controller submit] Received request for /api/collecte.');
-    console.log('[diagnostic.controller submit] Request Body:', JSON.stringify(req.body, null, 2));
-    
-    const { problemDescription, systemInfo } = req.body as { problemDescription?: string, systemInfo?: SystemInfo };
+    // console.log('[diagnostic.controller submit] Request Body:', JSON.stringify(req.body, null, 2)); // Attention avec les logs de texte potentiellement longs
 
-    console.log(`[diagnostic.controller submit] Destructured problemDescription: '${problemDescription}'`);
-    console.log(`[diagnostic.controller submit] Destructured systemInfo type: ${typeof systemInfo}`);
+    // Récupérer problemDescription et systemInfoText du corps de la requête
+    const { problemDescription, systemInfoText } = req.body as { problemDescription?: string, systemInfoText?: string };
 
-    if (!problemDescription && (!systemInfo || Object.keys(systemInfo).length === 0)) {
-      console.error('[diagnostic.controller submit] Validation failed: problemDescription and systemInfo are effectively missing.');
-      res.status(400).json({ message: 'Aucune donnée de diagnostic fournie (problemDescription ou systemInfo attendu).' });
+    console.log(`[diagnostic.controller submit] Destructured problemDescription: '${problemDescription ? problemDescription.substring(0,100) + '...' : 'N/A'}'`);
+    console.log(`[diagnostic.controller submit] Destructured systemInfoText length: ${systemInfoText ? systemInfoText.length : 'N/A'}`);
+
+    // Vérification que l'un des deux champs est présent
+    if (!problemDescription && (!systemInfoText || systemInfoText.trim().length === 0)) {
+      console.error('[diagnostic.controller submit] Validation failed: problemDescription and systemInfoText are effectively missing.');
+      res.status(400).json({ message: 'Aucune donnée de diagnostic fournie. Veuillez fournir une description du problème et/ou les informations système.' });
       return;
     }
     
@@ -28,12 +30,13 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
       id: taskId,
       status: DiagnosticTaskStatus.PENDING,
       submittedAt: new Date(),
-      problemDescription,
-      systemInfo,
+      problemDescription: problemDescription, // Peut être undefined
+      systemInfoRaw: systemInfoText, // Stocker le texte brut, peut être undefined
     };
     tasksDB.set(taskId, newTask);
     console.log(`[diagnostic.controller submit Task ${taskId}]: Task created with PENDING status. tasksDB size: ${tasksDB.size}`);
 
+    // Le reste de la logique de traitement asynchrone reste similaire
     setTimeout(async () => {
       const task = tasksDB.get(taskId);
       if (!task) {
@@ -44,14 +47,16 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
       try {
         console.log(`[diagnostic.controller timeout Task ${taskId}]: ENTERING TRY block for AI processing. Current task status: ${task.status}`);
         task.status = DiagnosticTaskStatus.PROCESSING;
-        tasksDB.set(taskId, task); // Update status to PROCESSING
+        tasksDB.set(taskId, task); 
         console.log(`[diagnostic.controller timeout Task ${taskId}]: Status updated to PROCESSING.`);
         
-        console.log(`[diagnostic.controller timeout Task ${taskId}]: PREPARING to call processWithAI. SystemInfo keys: ${task.systemInfo ? Object.keys(task.systemInfo) : 'N/A'}, Problem: ${task.problemDescription ? `'${task.problemDescription.substring(0,50)}...'` : 'N/A'}`);
-        const aiReport = await processWithAI(task.systemInfo || {} as SystemInfo, task.problemDescription);
+        console.log(`[diagnostic.controller timeout Task ${taskId}]: PREPARING to call processWithAI. SystemInfoRaw length: ${task.systemInfoRaw ? task.systemInfoRaw.length : 'N/A'}, Problem: ${task.problemDescription ? `'${task.problemDescription.substring(0,50)}...'` : 'N/A'}`);
+        
+        // Passer systemInfoRaw (texte brut) et problemDescription au service AI
+        const aiReport = await processWithAI(task.systemInfoRaw, task.problemDescription);
         console.log(`[diagnostic.controller timeout Task ${taskId}]: RETURNED from processWithAI. Report snippet:`, JSON.stringify(aiReport).substring(0,100) + '...');
 
-        const currentTaskState = tasksDB.get(taskId); // Re-fetch to be safe
+        const currentTaskState = tasksDB.get(taskId); 
         if (!currentTaskState) {
             console.error(`[diagnostic.controller timeout Task ${taskId}]: Task disappeared from tasksDB after AI processing.`);
             return;
@@ -60,7 +65,7 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
         currentTaskState.report = aiReport;
         currentTaskState.status = DiagnosticTaskStatus.COMPLETED;
         currentTaskState.completedAt = new Date();
-        tasksDB.set(taskId, currentTaskState); // Update status to COMPLETED
+        tasksDB.set(taskId, currentTaskState); 
         console.log(`[diagnostic.controller timeout Task ${taskId}]: Status updated to COMPLETED. Report stored.`);
 
       } catch (aiError) {
@@ -72,16 +77,25 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
         if (taskToFail) {
           taskToFail.status = DiagnosticTaskStatus.FAILED;
           const errorMessage = aiError instanceof Error ? aiError.message : String(aiError);
-          taskToFail.report = { error: 'Erreur lors du traitement AI.', details: errorMessage };
-          taskToFail.error = errorMessage;
+          // S'assurer que le rapport d'erreur est conforme à la structure attendue par le frontend
+          taskToFail.report = { 
+            summary: 'Erreur de traitement AI',
+            analysis: [{ component: 'AI Processing', status: 'Failed', details: errorMessage, recommendation: 'Veuillez réessayer ou contacter le support.' }],
+            potentialCauses: ['Erreur interne'],
+            suggestedSolutions: ['Contacter le support technique.'],
+            confidenceScore: 0,
+            generatedAt: new Date().toISOString(),
+            error: 'Erreur lors du traitement AI.' // Champ spécifique pour l'erreur AI
+          };
+          taskToFail.error = errorMessage; // Erreur générale pour la tâche
           taskToFail.completedAt = new Date();
-          tasksDB.set(taskId, taskToFail); // Update status to FAILED
+          tasksDB.set(taskId, taskToFail); 
           console.log(`[diagnostic.controller timeout Task ${taskId}]: Status updated to FAILED due to error.`);
         } else {
           console.error(`[diagnostic.controller timeout Task ${taskId}]: Task not found in tasksDB when trying to mark as FAILED after an error.`);
         }
       }
-    }, 5000); // 5-second delay
+    }, 5000); // Délai de simulation pour le traitement
 
     res.status(202).json({ 
       message: 'Données de diagnostic reçues, traitement en cours.',
@@ -135,8 +149,9 @@ export const getDiagnosticReport = async (req: Request, res: Response): Promise<
         submittedAt: task.submittedAt.toISOString(),
         completedAt: task.completedAt?.toISOString(),
         problemDescription: task.problemDescription,
+        // Le champ 'diagnosticReport' contiendra maintenant la structure d'erreur définie ci-dessus
+        diagnosticReport: task.report, 
         errorDetails: `Le traitement du diagnostic a échoué. ${task.error ? `Détails: ${task.error}` : 'Aucun détail supplémentaire.'}`,
-        diagnosticReport: task.report,
       });
       return;
     }
@@ -152,7 +167,8 @@ export const getDiagnosticReport = async (req: Request, res: Response): Promise<
         diagnosticReport: task.report,
       });
     } else {
-      console.warn(`[diagnostic.controller getReport Task ${taskId}]: Task status is ${task.status} but state is unexpected (e.g. COMPLETED without report). Responding 404.`);
+      // Ce cas devrait être moins fréquent si les erreurs AI remplissent task.report
+      console.warn(`[diagnostic.controller getReport Task ${taskId}]: Task status is ${task.status} but state is unexpected (e.g. COMPLETED without report, or FAILED without structured report). Responding 404 or specific error.`);
       res.status(404).json({ 
         message: `Rapport pour la tâche ${taskId} est dans un état inattendu ou incomplet (statut: ${task.status}).`,
         taskId: task.id,

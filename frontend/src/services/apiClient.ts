@@ -1,10 +1,10 @@
 import axios from 'axios';
-import { DiagnosticTaskStatus } from '../types/diagnosticTaskStatus'; // Assurez-vous que ce chemin est correct
+import { DiagnosticTaskStatus } from '../types/diagnosticTaskStatus'; 
 
 // Structure pour les données envoyées au backend
 export interface SubmitDiagnosticPayload {
   problemDescription: string;
-  systemInfo?: any; // Peut être n'importe quel objet JSON, ou undefined
+  systemInfoText?: string; // Texte brut du script .bat
 }
 
 // Structure pour la réponse de soumission
@@ -40,17 +40,15 @@ export interface DiagnosticReport {
 
 
 const apiClient = axios.create({
-  baseURL: '/api', // Le proxy Vite s'occupera de rediriger vers http://localhost:3001
+  baseURL: '/api', 
 });
 
 export const submitDiagnostic = async (payload: SubmitDiagnosticPayload): Promise<SubmitDiagnosticResponse> => {
-  // console.log('[apiClient] Submitting diagnostic with payload:', payload);
   const response = await apiClient.post<SubmitDiagnosticResponse>('/collecte', payload);
   return response.data;
 };
 
 export const getDiagnosticReport = async (taskId: string): Promise<DiagnosticReport> => {
-  // console.log(`[apiClient] Fetching report for taskId: ${taskId}`);
   const response = await apiClient.get<DiagnosticReport>(`/diagnostic/${taskId}`);
   return response.data;
 };

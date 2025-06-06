@@ -1,22 +1,36 @@
 import { body, validationResult, ValidationChain } from 'express-validator';
 import { Request, Response, NextFunction } from 'express';
 
+// Mise à jour des validateurs pour accepter systemInfoText comme une chaîne
+// et rendre problemDescription optionnel si systemInfoText est fourni (ou vice-versa)
+// Pour l'instant, gardons les deux optionnels mais au moins l'un des deux devrait être requis
+// au niveau du contrôleur.
 export const validateDiagnosticData: ValidationChain[] = [
-  body('systemInfo').isObject().withMessage('systemInfo doit être un objet.'),
-  body('systemInfo.os.name').optional().isString().withMessage('systemInfo.os.name doit être une chaîne de caractères.'),
-  body('systemInfo.cpu.model').optional().isString().withMessage('systemInfo.cpu.model doit être une chaîne de caractères.'),
-  body('systemInfo.cpu.usage').optional().isNumeric().withMessage('systemInfo.cpu.usage doit être un nombre.'),
-  body('systemInfo.memory.total').optional().isNumeric().withMessage('systemInfo.memory.total doit être un nombre.'),
-  body('systemInfo.memory.free').optional().isNumeric().withMessage('systemInfo.memory.free doit être un nombre.'),
-  // Ajoutez d'autres validations au besoin pour systemInfo
-  
-  body('userProblem').optional().isString().trim().escape().withMessage('userProblem doit être une chaîne de caractères.'),
+  // Supprimé : body('systemInfo').isObject().withMessage('systemInfo doit être un objet.'),
+  // Supprimé : body('systemInfo.os.name').optional().isString().withMessage('systemInfo.os.name doit être une chaîne de caractères.'),
+  // ... autres validations pour systemInfo ...
+
+  // Ajouté : validation pour systemInfoText
+  body('systemInfoText')
+    .optional()
+    .isString().withMessage('systemInfoText doit être une chaîne de caractères.')
+    .trim(), // Enlever les espaces inutiles
+
+  body('problemDescription')
+    .optional()
+    .isString().withMessage('problemDescription doit être une chaîne de caractères.')
+    .trim()
+    .escape(),
 ];
 
 export const handleValidationErrors = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    console.error('[validator.middleware] Validation errors:', JSON.stringify(errors.array(), null, 2));
+    return res.status(400).json({ 
+      message: 'Erreurs de validation des données.',
+      errors: errors.array() 
+    });
   }
   next();
 };
