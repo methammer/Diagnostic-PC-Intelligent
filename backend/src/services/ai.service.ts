@@ -1,66 +1,164 @@
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { AIReport } from '../models/diagnosticTask.model';
 
-// Simule une latence pour l'appel à une IA externe
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// Fonction pour traiter les données avec une "IA" (simulation)
-// systemInfoRaw est maintenant le texte brut du fichier .bat
+if (!GEMINI_API_KEY) {
+  console.error("GEMINI_API_KEY is not defined. AI service will not function.");
+}
+
+const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
+const modelName = 'gemini-1.5-flash-latest'; // Supports large context window
+
+const generationConfig = {
+  temperature: 0.7,
+  topK: 1,
+  topP: 1,
+  maxOutputTokens: 8192,
+};
+
+const safetySettings = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+];
+
+function buildPrompt(systemInfoRaw: string | undefined, problemDescription?: string): string {
+  const systemInfoSegment = systemInfoRaw && systemInfoRaw.trim().length > 0 
+    ? `System Information (raw text):
+---
+${systemInfoRaw.substring(0, 900000)} ${systemInfoRaw.length > 900000 ? "\n[...SYSTEM INFO TRUNCATED DUE TO LENGTH...]" : ""}
+---`
+    : "System Information: Not provided or empty.";
+
+  const problemDescriptionSegment = problemDescription && problemDescription.trim().length > 0
+    ? `Problem Description:
+---
+${problemDescription}
+---`
+    : "Problem Description: Not provided.";
+
+  return `
+You are an expert PC diagnostic AI. Your task is to analyze the provided system information and problem description to identify potential issues, their causes, and suggest solutions.
+
+Please provide your analysis STRICTLY in the following JSON format. Do NOT include any text outside of this JSON structure, not even "json" or backticks.
+
+The JSON structure should conform to this TypeScript interface:
+\`\`\`typescript
+interface AIReportOutput {{
+  summary: string; // A concise summary of the overall diagnostic findings.
+  analysis: Array<{{
+    component: string; // Name of the system component or aspect analyzed (e.g., "Operating System", "CPU", "Memory", "Disk Space", "Specific Driver", "User Reported Issue").
+    status: string; // Status of the component (e.g., "Normal", "Warning", "Critical", "Unknown", "Information").
+    details: string; // Detailed findings about this component.
+    recommendation: string; // Specific recommendation for this component.
+  }}>;
+  potentialCauses: string[]; // A list of potential root causes for the identified issues.
+  suggestedSolutions: string[]; // A list of actionable suggested solutions.
+  confidenceScore: number; // A numerical score between 0.0 (low confidence) and 1.0 (high confidence) representing your certainty in this diagnosis.
+}}
+\`\`\`
+
+${systemInfoSegment}
+
+${problemDescriptionSegment}
+
+Based on all the information, generate the JSON output as described above.
+If information is insufficient for a thorough analysis, reflect this in your summary, analysis (e.g., status "Unknown" or "Insufficient Data"), and a lower confidenceScore.
+Ensure the 'analysis' array provides a breakdown of different components or aspects you've considered.
+If no specific problem is described, focus on a general health check based on system info, if available.
+`;
+}
+
 export const processWithAI = async (systemInfoRaw: string | undefined, problemDescription?: string): Promise<AIReport> => {
-  console.log(`[ai.service] Début du traitement AI. Description: "${problemDescription ? problemDescription.substring(0,100)+'...' : 'N/A'}", Longueur des infos système brutes: ${systemInfoRaw?.length ?? 0}`);
-  await sleep(3000); // Simule le temps de traitement de l'IA
+  console.log(`[ai.service] Starting AI processing with Gemini. Problem: "${problemDescription ? problemDescription.substring(0, 50) + '...' : 'N/A'}", System Info Length: ${systemInfoRaw?.length ?? 0}`);
 
-  // Logique de l'IA pour parser et interpréter systemInfoRaw.
-  // Ceci est une simulation basique. Une vraie IA nécessiterait un parsing plus complexe.
-  let systemAnalysisDetails = 'Aucune information système brute n\'a été fournie ou elle est vide.';
-  let systemStatus = 'Non fournies';
-  let systemRecommendation = 'Fournir les informations système via le script .bat pour un diagnostic plus précis.';
-
-  if (systemInfoRaw && systemInfoRaw.trim().length > 0) {
-    systemStatus = 'Reçues (Texte Brut)';
-    // Tentative de détection de sections pour une analyse un peu plus "intelligente" (très basique)
-    if (systemInfoRaw.includes("[SECTION_DEBUT: Pilotes Systemes]")) {
-      systemAnalysisDetails = `Les données brutes du système (${systemInfoRaw.length} caractères) ont été reçues. Contient une section sur les pilotes systèmes. Nécessite une analyse détaillée par l'IA.`;
-    } else if (systemInfoRaw.includes("Windows IP Configuration")) {
-      systemAnalysisDetails = `Les données brutes du système (${systemInfoRaw.length} caractères) ont été reçues. Semble contenir des informations réseau. Nécessite une analyse détaillée par l'IA.`;
-    } else {
-      systemAnalysisDetails = `Les données brutes du système (${systemInfoRaw.length} caractères) ont été reçues et nécessitent une analyse détaillée par l'IA. Format non spécifiquement reconnu.`;
-    }
-    systemRecommendation = 'L\'IA doit interpréter ces données textuelles pour identifier les problèmes potentiels.';
+  if (!genAI) {
+    console.error("[ai.service] Gemini AI client not initialized due to missing API key.");
+    throw new Error("AI Service is not configured. Missing API Key.");
   }
 
+  const model = genAI.getGenerativeModel({ model: modelName, generationConfig, safetySettings });
+  const prompt = buildPrompt(systemInfoRaw, problemDescription);
 
-  const mockReport: AIReport = {
-    summary: `Analyse basée sur ${problemDescription ? `la description "${problemDescription}"` : 'les informations système uniquement'}. Les informations système ont été fournies sous forme de texte brut.`,
-    analysis: [
-      {
-        component: 'Informations Système (Texte Brut)',
-        status: systemStatus,
-        details: systemAnalysisDetails,
-        recommendation: systemRecommendation,
-      },
-      {
-        component: 'Description du Problème',
-        status: problemDescription ? 'Fournie' : 'Non fournie',
-        details: problemDescription ? `Problème décrit: "${problemDescription}"` : 'Aucune description de problème fournie.',
-        recommendation: problemDescription ? 'Analyser en conjonction avec les informations système.' : 'Fournir une description du problème pour aider au diagnostic.'
+  try {
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const aiResponseText = response.text();
+    
+    console.log("[ai.service] Raw response from Gemini (first 1000 chars):", aiResponseText.substring(0, 1000) + (aiResponseText.length > 1000 ? "..." : ""));
+    if (aiResponseText.length > 1000) {
+      console.log("[ai.service] Raw response from Gemini (last 1000 chars):" + "..." + aiResponseText.substring(aiResponseText.length - 1000));
+    }
+
+
+    let cleanedJsonText = aiResponseText;
+    const jsonRegex = /```json\s*([\s\S]*?)\s*```/im; // Added 'i' and 'm' flags for robustness
+    const match = cleanedJsonText.match(jsonRegex);
+    if (match && match[1]) {
+      cleanedJsonText = match[1];
+      console.log("[ai.service] Extracted content from ```json ... ``` block.");
+    }
+    
+    cleanedJsonText = cleanedJsonText.trim();
+
+    // If it's not already a clear JSON object, try to extract it more aggressively
+    if (!cleanedJsonText.startsWith("{") || !cleanedJsonText.endsWith("}")) {
+      console.log("[ai.service] Response did not start/end with {}. Attempting to find JSON object within the text.");
+      const firstBrace = cleanedJsonText.indexOf('{');
+      const lastBrace = cleanedJsonText.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleanedJsonText = cleanedJsonText.substring(firstBrace, lastBrace + 1);
+        console.log("[ai.service] Extracted potential JSON object from within the text.");
+      } else {
+        console.error("[ai.service] Could not extract a valid JSON object from AI response. Raw text before this attempt:", aiResponseText);
+        throw new Error("AI response did not appear to contain a JSON object after initial cleaning.");
       }
-    ],
-    potentialCauses: (systemInfoRaw && systemInfoRaw.length > 0 && problemDescription)
-      ? ['Analyse en cours par l\'IA à partir du texte brut...'] 
-      : ['Informations insuffisantes pour déterminer les causes potentielles sans analyse IA des données brutes et/ou description du problème.'],
-    suggestedSolutions: (systemInfoRaw && systemInfoRaw.length > 0 && problemDescription)
-      ? ['Solutions en attente de l\'analyse IA du texte brut...']
-      : ['Veuillez fournir à la fois la description du problème et les informations système pour des suggestions.'],
-    confidenceScore: (systemInfoRaw && systemInfoRaw.length > 0 && problemDescription) ? 0.55 : 0.15,
-    generatedAt: new Date().toISOString(),
-  };
+    }
 
-  // Simuler une erreur IA occasionnelle pour tester le flux d'erreur
-  // if (Math.random() < 0.1) { // 10% de chance d'erreur
-  //   console.error("[ai.service] Erreur simulée de l'IA.");
-  //   throw new Error("Erreur simulée lors du traitement par l'IA.");
-  // }
+    let parsedReport;
+    try {
+      console.log("[ai.service] Attempting to parse the following text as JSON:", cleanedJsonText.substring(0, 1000) + (cleanedJsonText.length > 1000 ? "..." : ""));
+      parsedReport = JSON.parse(cleanedJsonText);
+    } catch (parseError: any) {
+      console.error("[ai.service] JSON.parse FAILED. Error:", parseError.message);
+      console.error("[ai.service] Content that failed to parse (first 2000 chars):", cleanedJsonText.substring(0,2000) + (cleanedJsonText.length > 2000 ? "..." : ""));
+      // Log the original raw response as well for fuller context if parsing fails
+      console.error("[ai.service] Original raw response from AI was (first 2000 chars):", aiResponseText.substring(0,2000) + (aiResponseText.length > 2000 ? "..." : ""));
+      throw new Error(`AI response parsing error: ${parseError.message}`);
+    }
 
-  console.log('[ai.service] Traitement AI terminé (simulation avec texte brut).');
-  return mockReport;
+    const finalReport: AIReport = {
+      ...parsedReport,
+      generatedAt: new Date().toISOString(),
+    };
+    
+    console.log('[ai.service] Successfully parsed AI report.');
+    return finalReport;
+
+  } catch (error) {
+    console.error("[ai.service] Error during AI processing or parsing:", error);
+    let errorMessage = "An unexpected error occurred during AI processing.";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
+    
+    return {
+      summary: 'AI Processing Error',
+      analysis: [{
+        component: 'AI Interaction',
+        status: 'Failed',
+        details: `Could not get a valid analysis from the AI. Error: ${errorMessage}`,
+        recommendation: 'Try submitting again. If the problem persists, check system logs or contact support.'
+      }],
+      potentialCauses: ['AI service unavailable or returned an invalid response.', 'The AI may have struggled with the format or content of the input data.'],
+      suggestedSolutions: ['Verify AI service configuration and API key.', 'Check the AI model limits and prompt complexity.', 'Ensure the input data is clean and does not contain unexpected characters that might break JSON generation.'],
+      confidenceScore: 0,
+      generatedAt: new Date().toISOString(),
+      error: `AI Processing Error: ${errorMessage}`,
+    };
+  }
 };

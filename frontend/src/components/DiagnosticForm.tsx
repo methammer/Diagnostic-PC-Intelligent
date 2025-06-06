@@ -20,15 +20,19 @@ const DiagnosticForm: React.FC<DiagnosticFormProps> = ({ onSubmit, isLoading }) 
       return;
     }
     setDescriptionError('');
-    if (!systemInfoText.trim() && selectedFile) {
-      setFileError('Le fichier sélectionné semble vide ou n\'a pas pu être lu. Veuillez vérifier le fichier ou en sélectionner un autre.');
+
+    if (!selectedFile) {
+      setFileError('Veuillez sélectionner le fichier DiagnosticInfo.txt.');
       return;
     }
-    if (!selectedFile && !systemInfoText) { // Allow submission if user manually pasted text (fallback)
-        // Or, if file upload is mandatory:
-        // setFileError('Veuillez sélectionner un fichier d\'informations système.');
-        // return;
+
+    // This check is important if the file was selected but somehow resulted in empty text
+    // (e.g., an empty file was uploaded, or a read error occurred that wasn't caught by reader.onerror)
+    if (selectedFile && !systemInfoText.trim()) {
+      setFileError('Le fichier sélectionné est vide ou n\'a pas pu être lu. Veuillez vérifier le fichier.');
+      return;
     }
+    
     setFileError('');
     onSubmit(problemDescription, systemInfoText);
   };
@@ -41,7 +45,6 @@ const DiagnosticForm: React.FC<DiagnosticFormProps> = ({ onSubmit, isLoading }) 
       const response = await fetch(scriptUrl);
       if (!response.ok) {
         console.error('Échec de la récupération du script:', response.status, response.statusText);
-        const errorText = await response.text();
         alert(`Erreur lors du téléchargement du script: ${response.status} ${response.statusText}.`);
         return;
       }
@@ -75,7 +78,10 @@ const DiagnosticForm: React.FC<DiagnosticFormProps> = ({ onSubmit, isLoading }) 
         reader.onerror = () => {
           setFileError('Erreur lors de la lecture du fichier.');
           setSystemInfoText('');
-          setSelectedFile(null);
+          setSelectedFile(null); // Clear selected file on read error
+           if(fileInputRef.current) { // Reset file input visually
+            fileInputRef.current.value = "";
+          }
         }
         reader.readAsText(file);
       } else {
@@ -119,7 +125,7 @@ const DiagnosticForm: React.FC<DiagnosticFormProps> = ({ onSubmit, isLoading }) 
           Pour nous aider à diagnostiquer le problème sur un PC Windows, veuillez suivre ces étapes :
         </p>
         <a
-          href="/scripts/collect_windows_info.bat"
+          href="/scripts/collect_windows_info.bat" // Ensure this path is correct relative to your public folder
           onClick={handleDownloadScript}
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
@@ -148,7 +154,7 @@ const DiagnosticForm: React.FC<DiagnosticFormProps> = ({ onSubmit, isLoading }) 
           id="systemInfoFile"
           name="systemInfoFile"
           ref={fileInputRef}
-          accept=".txt,.log" // Accepter les fichiers .txt et .log
+          accept=".txt,.log" 
           onChange={handleFileChange}
           className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
         />
@@ -157,13 +163,6 @@ const DiagnosticForm: React.FC<DiagnosticFormProps> = ({ onSubmit, isLoading }) 
         )}
         {fileError && <p className="text-xs text-red-600 mt-1">{fileError}</p>}
         
-        {/* Optionnel: Afficher un aperçu du contenu du fichier (peut être long) */}
-        {/* {systemInfoText && (
-          <div className="mt-2 p-2 border rounded-md bg-gray-50 max-h-40 overflow-y-auto">
-            <p className="text-xs text-gray-500">Aperçu du contenu :</p>
-            <pre className="text-xs whitespace-pre-wrap">{systemInfoText.substring(0, 500)}...</pre>
-          </div>
-        )} */}
          <p className="text-xs text-gray-500 mt-1">
           Le script génère un fichier <code>DiagnosticInfo.txt</code>. Veuillez l'importer ici.
         </p>
@@ -173,7 +172,7 @@ const DiagnosticForm: React.FC<DiagnosticFormProps> = ({ onSubmit, isLoading }) 
         <button
           type="submit"
           className="btn btn-primary w-full flex justify-center items-center"
-          disabled={isLoading || (descriptionError !== '')}
+          disabled={isLoading || (descriptionError !== '') || (fileError !== '')}
         >
           {isLoading ? (
             <>

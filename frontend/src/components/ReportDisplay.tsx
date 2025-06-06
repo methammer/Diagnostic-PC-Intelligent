@@ -1,6 +1,6 @@
 import React from 'react';
 import { DiagnosticReport } from '../services/apiClient';
-import { DiagnosticTaskStatus } from '../types/diagnosticTaskStatus'; // Updated import path
+import { DiagnosticTaskStatus } from '../types/diagnosticTaskStatus'; 
 
 interface ReportDisplayProps {
   reportData: DiagnosticReport | null;
@@ -8,6 +8,18 @@ interface ReportDisplayProps {
 }
 
 const ReportDisplay: React.FC<ReportDisplayProps> = ({ reportData, isLoading }) => {
+  if (reportData) {
+    // This log can be very verbose, let's keep it but be mindful for production
+    // console.log("[ReportDisplay] reportData received:", JSON.parse(JSON.stringify(reportData))); 
+    if (reportData.status === DiagnosticTaskStatus.COMPLETED) {
+      if (reportData.diagnosticReport) {
+        // console.log("[ReportDisplay] reportData.diagnosticReport (COMPLETED):", JSON.parse(JSON.stringify(reportData.diagnosticReport)));
+      } else {
+        // console.error("[ReportDisplay] reportData.diagnosticReport is FALSY for COMPLETED status:", reportData.diagnosticReport);
+      }
+    }
+  }
+
   if (isLoading && !reportData) {
     return (
       <div className="card text-center animate-fade-in">
@@ -20,10 +32,10 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ reportData, isLoading }) 
   }
 
   if (!reportData) {
-    return null; // Ne rien afficher si pas de données et pas en chargement initial
+    return null; 
   }
 
-  const getStatusClass = (status: DiagnosticTaskStatus) => {
+  const getStatusClass = (status: DiagnosticTaskStatus | string) => { // Allow string for safety
     switch (status) {
       case DiagnosticTaskStatus.PENDING: return 'status-pending';
       case DiagnosticTaskStatus.PROCESSING: return 'status-processing';
@@ -34,6 +46,10 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ reportData, isLoading }) 
   };
   
   const renderAnalysis = (analysis: any[]) => {
+    if (!analysis || analysis.length === 0) {
+      // console.log("[ReportDisplay] renderAnalysis called with empty or null analysis array.");
+      return <p className="text-sm text-gray-500">Aucune donnée d'analyse détaillée disponible.</p>;
+    }
     return analysis.map((item, index) => (
       <div key={index} className="mb-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
         <h4 className="font-semibold text-brand-dark text-md">{item.component} - <span className={item.status === 'Normal' ? 'text-green-600' : 'text-red-600'}>{item.status}</span></h4>
@@ -44,6 +60,10 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ reportData, isLoading }) 
   };
 
   const renderList = (title: string, items: string[]) => {
+    if (!items || items.length === 0) {
+      // console.log(`[ReportDisplay] renderList called for "${title}" with empty or null items array.`);
+      return <p className="text-sm text-gray-500">Aucune information disponible pour "{title}".</p>;
+    }
     return (
       <>
         <h4 className="font-semibold text-brand-dark text-md mt-4 mb-2">{title}</h4>
@@ -101,10 +121,20 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ reportData, isLoading }) 
           {reportData.diagnosticReport.potentialCauses && renderList("Causes Potentielles", reportData.diagnosticReport.potentialCauses)}
           {reportData.diagnosticReport.suggestedSolutions && renderList("Solutions Suggérées", reportData.diagnosticReport.suggestedSolutions)}
           
-          <p className="text-xs text-gray-400 mt-6 text-right">Rapport généré le: {new Date(reportData.diagnosticReport.generatedAt).toLocaleString('fr-FR')}</p>
+          {reportData.diagnosticReport.generatedAt && 
+            <p className="text-xs text-gray-400 mt-6 text-right">Rapport généré le: {new Date(reportData.diagnosticReport.generatedAt).toLocaleString('fr-FR')}</p>
+          }
         </div>
       )}
       
+      {reportData.status === DiagnosticTaskStatus.COMPLETED && !reportData.diagnosticReport && (
+        <div className="my-4 p-4 bg-yellow-50 border border-yellow-300 rounded-md">
+          <h3 className="text-lg font-semibold text-yellow-700 mb-1">Données de Rapport Incomplètes</h3>
+          <p className="text-yellow-800">Le statut est "COMPLETED", mais les détails du rapport IA ne sont pas disponibles. Veuillez vérifier les logs ou contacter le support.</p>
+          <p className="text-xs text-yellow-600">Raw diagnosticReport value: {JSON.stringify(reportData.diagnosticReport)}</p>
+        </div>
+      )}
+
       <div className="mt-6 text-xs text-gray-500">
         <p>Soumis le: {new Date(reportData.submittedAt).toLocaleString('fr-FR')}</p>
         {reportData.completedAt && <p>Terminé le: {new Date(reportData.completedAt).toLocaleString('fr-FR')}</p>}

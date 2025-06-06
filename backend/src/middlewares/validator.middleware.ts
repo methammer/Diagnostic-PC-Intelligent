@@ -1,20 +1,13 @@
 import { body, validationResult, ValidationChain } from 'express-validator';
 import { Request, Response, NextFunction } from 'express';
 
-// Mise à jour des validateurs pour accepter systemInfoText comme une chaîne
-// et rendre problemDescription optionnel si systemInfoText est fourni (ou vice-versa)
-// Pour l'instant, gardons les deux optionnels mais au moins l'un des deux devrait être requis
-// au niveau du contrôleur.
+// Validator updated to only expect 'problemDescription' and 'systemInfoText' as optional strings.
+// No JSON parsing or object validation for systemInfo.
 export const validateDiagnosticData: ValidationChain[] = [
-  // Supprimé : body('systemInfo').isObject().withMessage('systemInfo doit être un objet.'),
-  // Supprimé : body('systemInfo.os.name').optional().isString().withMessage('systemInfo.os.name doit être une chaîne de caractères.'),
-  // ... autres validations pour systemInfo ...
-
-  // Ajouté : validation pour systemInfoText
   body('systemInfoText')
     .optional()
     .isString().withMessage('systemInfoText doit être une chaîne de caractères.')
-    .trim(), // Enlever les espaces inutiles
+    .trim(),
 
   body('problemDescription')
     .optional()

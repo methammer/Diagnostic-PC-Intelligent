@@ -12,26 +12,21 @@ const App: React.FC = () => {
   const [isLoadingReport, setIsLoadingReport] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFormSubmit = async (problemDescription: string, systemInfoJSON: string) => {
+  // Renamed systemInfoJSON to systemInfoText for clarity
+  const handleFormSubmit = async (problemDescription: string, systemInfoText: string) => {
     setIsLoadingForm(true);
     setError(null);
     setReportData(null);
     setTaskId(null);
 
-    let systemInfo: any = {}; // Default to empty object
-    if (systemInfoJSON.trim()) {
-      try {
-        systemInfo = JSON.parse(systemInfoJSON);
-      } catch (parseError) {
-        console.error("[App.tsx handleFormSubmit] Erreur de parsing du JSON systemInfo:", parseError);
-        setError("Le format des Informations Système (JSON) est invalide. Veuillez vérifier la syntaxe.");
-        setIsLoadingForm(false);
-        return;
-      }
-    }
+    // The systemInfoText is already the raw string content from the file.
+    // No JSON.parse needed here.
+    // The backend expects a field named 'systemInfoText'.
 
     try {
-      const payload: SubmitDiagnosticPayload = { problemDescription, systemInfo };
+      // Ensure the payload matches what the backend controller expects in req.body
+      // and what SubmitDiagnosticPayload type defines.
+      const payload: SubmitDiagnosticPayload = { problemDescription, systemInfoText };
       // console.log("[App.tsx handleFormSubmit] Submitting with payload:", payload);
       const response = await submitDiagnostic(payload);
       setTaskId(response.taskId);

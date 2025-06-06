@@ -1,32 +1,33 @@
-import express, { Express, Request, Response, NextFunction } from 'express';
+import dotenv from 'dotenv';
+dotenv.config(); // Load environment variables at the very beginning
+
+import express from 'express';
+import cors from 'cors';
 import diagnosticRoutes from './routes/diagnostic.routes';
 
-const app: Express = express();
-const port = process.env.BACKEND_PORT || 3001;
+const app = express();
+const PORT = process.env.PORT || 3001;
 
-// Middleware pour parser le JSON
-app.use(express.json());
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '10mb' })); // For parsing application/json, increased limit
+app.use(express.urlencoded({ limit: '10mb', extended: true })); // For parsing application/x-www-form-urlencoded, increased limit
 
-// Middleware pour les logs de requêtes (simple)
-app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log(`[server]: ${req.method} ${req.url}`);
-  next();
-});
 
-// Routes de l'API
+// Routes
 app.use('/api', diagnosticRoutes);
 
-// Route de base
-app.get('/', (req: Request, res: Response) => {
-  res.send('Backend server for PC Diagnostic Assistant is running with Express and TypeScript!');
+// Root route
+app.get('/', (req, res) => {
+  res.send('Diagnostic PC Intelligent Backend is running!');
 });
 
-// Gestionnaire d'erreurs simple
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error(`[server]: Error: ${err.message}`);
-  res.status(500).send('Something broke!');
-});
-
-app.listen(port, () => {
-  console.log(`[server]: Backend server is running at http://localhost:${port}`);
+// Start server
+app.listen(PORT, () => {
+  console.log(`Backend server is running on http://localhost:${PORT}`);
+  if (!process.env.GEMINI_API_KEY) {
+    console.warn('[WARNING] GEMINI_API_KEY is not set in the environment variables. AI processing will fail.');
+  } else {
+    console.log('[INFO] GEMINI_API_KEY is loaded.');
+  }
 });
