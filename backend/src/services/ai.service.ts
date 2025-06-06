@@ -1,5 +1,5 @@
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
-import { AIReport } from '../models/diagnosticTask.model';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, GenerativeModel } from '@google/generative-ai';
+import { AIReport, ChatMessage } from '../models/diagnosticTask.model'; // Added ChatMessage
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -8,7 +8,7 @@ if (!GEMINI_API_KEY) {
 }
 
 const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
-const modelName = 'gemini-1.5-flash-latest'; // Supports large context window
+const modelName = 'gemini-1.5-flash-latest';
 
 const generationConfig = {
   temperature: 0.7,
@@ -92,9 +92,8 @@ export const processWithAI = async (systemInfoRaw: string | undefined, problemDe
       console.log("[ai.service] Raw response from Gemini (last 1000 chars):" + "..." + aiResponseText.substring(aiResponseText.length - 1000));
     }
 
-
     let cleanedJsonText = aiResponseText;
-    const jsonRegex = /```json\s*([\s\S]*?)\s*```/im; // Added 'i' and 'm' flags for robustness
+    const jsonRegex = /```json\s*([\s\S]*?)\s*```/im;
     const match = cleanedJsonText.match(jsonRegex);
     if (match && match[1]) {
       cleanedJsonText = match[1];
@@ -103,7 +102,6 @@ export const processWithAI = async (systemInfoRaw: string | undefined, problemDe
     
     cleanedJsonText = cleanedJsonText.trim();
 
-    // If it's not already a clear JSON object, try to extract it more aggressively
     if (!cleanedJsonText.startsWith("{") || !cleanedJsonText.endsWith("}")) {
       console.log("[ai.service] Response did not start/end with {}. Attempting to find JSON object within the text.");
       const firstBrace = cleanedJsonText.indexOf('{');
@@ -124,7 +122,6 @@ export const processWithAI = async (systemInfoRaw: string | undefined, problemDe
     } catch (parseError: any) {
       console.error("[ai.service] JSON.parse FAILED. Error:", parseError.message);
       console.error("[ai.service] Content that failed to parse (first 2000 chars):", cleanedJsonText.substring(0,2000) + (cleanedJsonText.length > 2000 ? "..." : ""));
-      // Log the original raw response as well for fuller context if parsing fails
       console.error("[ai.service] Original raw response from AI was (first 2000 chars):", aiResponseText.substring(0,2000) + (aiResponseText.length > 2000 ? "..." : ""));
       throw new Error(`AI response parsing error: ${parseError.message}`);
     }
@@ -160,5 +157,74 @@ export const processWithAI = async (systemInfoRaw: string | undefined, problemDe
       generatedAt: new Date().toISOString(),
       error: `AI Processing Error: ${errorMessage}`,
     };
+  }
+};
+
+export const chatWithAI = async (
+  systemInfoRaw: string,
+  diagnosticReport: AIReport,
+  userMessage: string,
+  chatHistory: ChatMessage[] // Using the imported ChatMessage type
+): Promise<string> => {
+  console.log(`[ai.service chatWithAI] User message: "${userMessage.substring(0, 100)}...", History length: ${chatHistory.length}`);
+
+  if (!genAI) {
+    console.error("[ai.service chatWithAI] Gemini AI client not initialized.");
+    throw new Error("AI Service (chat) is not configured. Missing API Key.");
+  }
+  
+  const modelForChat: GenerativeModel = genAI.getGenerativeModel({ model: modelName, generationConfig, safetySettings });
+
+  // Truncate context to avoid overly long prompts, adjust limits as needed
+  const truncatedSystemInfo = systemInfoRaw.substring(0, 100000) + (systemInfoRaw.length > 100000 ? "\n[...SYSTEM INFO TRUNCATED...]" : "");
+  const reportString = JSON.stringify(diagnosticReport, null, 2);
+  const truncatedReport = reportString.substring(0, 100000) + (reportString.length > 100000 ? "\n[...REPORT TRUNCATED...]" : "");
+
+  const fullPrompt = `
+System Preamble:
+You are a helpful AI assistant named "Diagnostic Assistant" specializing in PC diagnostics.
+You are discussing a PC issue with a user.
+You MUST use the following information about the user's system and a previously generated diagnostic report to answer the user's questions.
+If the user asks something not covered by the provided System Information or Diagnostic Report, state that the information is not available in the provided documents.
+Do not invent information. Be concise and directly answer the user's query in relation to the provided data.
+Do not refer to yourself by any other model name (e.g., Gemini).
+
+Context for this specific interaction:
+System Information (DiagnosticInfo.txt):
+---
+${truncatedSystemInfo}
+---
+Diagnostic Report:
+---
+${truncatedReport}
+---
+
+Conversation History (if any):
+${chatHistory.map(entry => `${entry.role === 'user' ? 'User' : 'Assistant'}: ${entry.parts.map(p => p.text).join('\n')}`).join('\n\n')}
+
+Current User Message:
+User: ${userMessage}
+
+Assistant Response:
+`;
+
+  try {
+    const result = await modelForChat.generateContent(fullPrompt);
+    const response = result.response;
+    const aiResponseText = response.text();
+    
+    console.log("[ai.service chatWithAI] Raw response from Gemini:", aiResponseText.substring(0, 200) + "...");
+    return aiResponseText;
+
+  } catch (error) {
+    console.error("[ai.service chatWithAI] Error during AI chat processing:", error);
+    let errorMessage = "An unexpected error occurred during AI chat processing.";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
+    // Return a user-friendly error message to be displayed in chat
+    return `I'm sorry, I encountered an error trying to process your message: ${errorMessage}. Please try again.`;
   }
 };

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { processWithAI } from '../services/ai.service';
-import { DiagnosticTask, DiagnosticTaskStatus } from '../models/diagnosticTask.model';
+import { processWithAI, chatWithAI } from '../services/ai.service'; // Added chatWithAI
+import { DiagnosticTask, DiagnosticTaskStatus, ChatMessage, AIReport } from '../models/diagnosticTask.model'; // Added ChatMessage, AIReport
 
 const tasksDB: Map<string, DiagnosticTask> = new Map();
 
@@ -19,9 +19,7 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
       res.status(400).json({ message: 'Aucune donnée de diagnostic fournie. Veuillez fournir une description du problème et/ou les informations système.' });
       return;
     }
-    // Ensure problemDescription is at least an empty string if not provided, to avoid issues with undefined.
     const finalProblemDescription = problemDescription || '';
-    // Ensure systemInfoText is at least an empty string if not provided.
     const finalSystemInfoText = systemInfoText || '';
     
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -32,7 +30,7 @@ export const submitDiagnosticData = async (req: Request, res: Response): Promise
       status: DiagnosticTaskStatus.PENDING,
       submittedAt: new Date(),
       problemDescription: finalProblemDescription, 
-      systemInfoRaw: finalSystemInfoText, // Stores the raw text content
+      systemInfoRaw: finalSystemInfoText,
     };
     tasksDB.set(taskId, newTask);
     console.log(`[diagnostic.controller submit Task ${taskId}]: Task created with PENDING status. tasksDB size: ${tasksDB.size}`);
@@ -180,5 +178,56 @@ export const getDiagnosticReport = async (req: Request, res: Response): Promise<
         console.error(`[diagnostic.controller getReport Task ${taskId}] Outer error details: Name: ${error.name}, Message: ${error.message}, Stack: ${error.stack}`);
     }
     res.status(500).json({ message: 'Erreur interne du serveur lors de la récupération du rapport.' });
+  }
+};
+
+export const handleChatMessage = async (req: Request, res: Response): Promise<void> => {
+  const { taskId } = req.params;
+  const { userMessage, chatHistory } = req.body as { 
+    userMessage?: string, 
+    chatHistory?: ChatMessage[] // Use imported ChatMessage type
+  };
+
+  console.log(`[diagnostic.controller chat Task ${taskId}]: Received chat message. User: "${userMessage ? userMessage.substring(0,50) + '...' : 'N/A'}". History length: ${chatHistory?.length ?? 0}`);
+
+  if (!userMessage || userMessage.trim() === "") {
+    res.status(400).json({ message: "User message cannot be empty." });
+    return;
+  }
+
+  const task = tasksDB.get(taskId);
+  if (!task) {
+    console.warn(`[diagnostic.controller chat Task ${taskId}]: Task not found.`);
+    res.status(404).json({ message: `Task ${taskId} not found.` });
+    return;
+  }
+
+  if (task.status !== DiagnosticTaskStatus.COMPLETED || !task.report) {
+    console.warn(`[diagnostic.controller chat Task ${taskId}]: Chat attempted on non-completed/reportless task. Status: ${task.status}`);
+    res.status(400).json({ message: `Chat is only available for completed tasks with a report. Task status: ${task.status}` });
+    return;
+  }
+
+  if (typeof task.systemInfoRaw !== 'string' || !task.report) {
+      console.error(`[diagnostic.controller chat Task ${taskId}]: Missing systemInfoRaw or report for completed task.`);
+      res.status(500).json({ message: "Internal error: Diagnostic data for chat is incomplete." });
+      return;
+  }
+  
+  try {
+    const aiResponse = await chatWithAI(
+      task.systemInfoRaw, 
+      task.report as AIReport, // Cast as AIReport, as it's checked above
+      userMessage,
+      chatHistory || [] 
+    );
+    console.log(`[diagnostic.controller chat Task ${taskId}]: AI response received: "${aiResponse.substring(0,100)}..."`);
+    res.status(200).json({ aiResponse });
+  } catch (error) {
+    console.error(`[diagnostic.controller chat Task ${taskId}]: Error in chatWithAI call:`, error);
+    if (error instanceof Error) {
+        console.error(`[diagnostic.controller chat Task ${taskId}]: Error details: Name: ${error.name}, Message: ${error.message}`);
+    }
+    res.status(500).json({ message: "Error processing chat message with AI." });
   }
 };
